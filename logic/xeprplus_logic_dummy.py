@@ -3,9 +3,6 @@ import os
 import sys
 import time
 
-sys.path.insert(0, os.popen("Xepr --apipath").read())
-import XeprAPI
-
 class XeprPlusLogic():
 
     def __init__(self):
@@ -36,13 +33,8 @@ class XeprPlusLogic():
             
     
     def close_xepr_api(self):
-        self.xepr.XeprClose()
+        print('Close xepr api.')
 
-
-    def open_xepr_api(self):
-        self.xepr = XeprAPI.Xepr()
-        self.hidden_exp = self.xepr.XeprExperiment('AcqHidden')
-        return 0
 
     def create_new_experiment(self, exp_type):
         if exp_type == 0:
@@ -59,7 +51,32 @@ class XeprPlusLogic():
                       "'Transient recorder'", 'Off', 'Off', 'On']
         else:
             raise Exception("exp_type must be a number between 0 and 2.")
-        self._command_wait(self.xepr.XeprCmds.aqExpNew, params)
-        exp = self.xepr.XeprExperiment(self.exp_names[-1])
-        self.exps.append(exp)
+        print("Create new experiment.")
+        self.exps.append(params)
+
+
+    def open_xepr_api(self):
+        print('Open xepr api.')
+        return 0
+
+        
+    def run_measurement(self, folder, filename):
+        print("run simple measurement")
+        print("folder:", folder)
+        print("filename", filename)
+        return 0
+    
+    def run_measurement_goal_snr(self, folder, filename, goal_snr):
+        print("run measurement with goal snr")
+        print("folder:", folder)
+        print("filename", filename)
+        print("goal_snr", goal_snr)
+        return 0
+
+    def run_measurement_for_time(self, folder, filename, for_time):
+        print("run measurement for time")
+        print("folder:", folder)
+        print("filename", filename)
+        print("for_time:", for_time, "hours")
+        return 0
         
