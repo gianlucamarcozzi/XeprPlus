@@ -1,9 +1,10 @@
 # %%
 from datetime import datetime
+import os
+import sys
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
-import sys
 
 class XeprPlusMainWindow():
     
@@ -102,8 +103,8 @@ class XeprPlusRunMeasWindow():
     def __init__(self, top_level):
         self.win = tk.Toplevel(top_level)
         self.win.title("Run Measurement")
-        self.win.geometry("400x200")
-        self.win.minsize(400, 200)
+        self.win.geometry("500x200")
+        self.win.minsize(500, 200)
         self.win.resizable(True, False)
 
         # Upper frame (radio buttons)
@@ -220,7 +221,7 @@ class XeprPlusGui():
             command=self.newexpw_create_button_clicked)
         
         self._runmeasw.save_folder_browse_button.config(
-            command=self.runmeasw_save_folder_button_clicked)
+            command=self.runmeasw_save_folder_browse_button_clicked)
         self._runmeasw.cancel_button.config(
             command=self.runmeasw_cancel_button_clicked)
         self._runmeasw.run_button.config(
@@ -251,7 +252,7 @@ class XeprPlusGui():
     def mw_new_exp_button_clicked(self):
         self._newexpw.win.deiconify()
         self._newexpw.win.lift()
-        self._newexpw.win.focus_force()
+        self._newexpw.win.focus()
     
 
     def mw_open_xepr_api(self):
@@ -263,7 +264,7 @@ class XeprPlusGui():
     def mw_run_meas_button_clicked(self):
         self._runmeasw.win.deiconify()
         self._runmeasw.win.lift()
-        self._runmeasw.win.focus_force()
+        self._runmeasw.win.focus()
 
 
     def newexpw_cancel_button_clicked(self):
@@ -282,23 +283,46 @@ class XeprPlusGui():
     def runmeasw_run_button_clicked(self):
         folder = self._runmeasw.save_folder_entry.get()
         filename = self._runmeasw.save_filename_entry.get()
+        path = os.path.join(folder, filename)
+        if folder == "" or filename == "":
+            # Error: missing entries
+            self._mw.win.focus()
+            tk.messagebox.showerror("Run measurement",
+                                    "Please select a folder and a filename.")
+            self._runmeasw.win.lift()
+            self._runmeasw.win.focus()
+            return
+        if os.path.isdir(path) or os.path.isfile(path):
+            self._runmeasw.win.focus_force()
+            res = tk.messagebox.askyesno(
+                "Run measurement",
+                f"A file or folder already exists at the chosen path" + 
+                f"\n{path}.\nOverwrite?")
+            if not res:
+                self._runmeasw.win.lift()
+                self._runmeasw.win.focus_force()
+                return
         if self._runmeasw.run_type.get() == 0:
             self._logic.run_measurement(folder, filename)
         elif self._runmeasw.run_type.get() == 1:
             goal_snr = self._runmeasw.run_goal_snr_entry.get()
+            # TODO add error handling for SNR here
             self._logic.run_measurement_goal_snr(folder, filename, goal_snr)
         elif self._runmeasw.run_type.get() == 2:
             for_time = self._runmeasw.run_for_time_entry.get()
+            # TODO add error handling for time here
+            # (and confirmation dialog as well????)
             self._logic.run_measurement_for_time(folder, filename, for_time)
         self._runmeasw.win.withdraw()
 
 
-    def runmeasw_save_folder_button_clicked(self):
+    def runmeasw_save_folder_browse_button_clicked(self):
+        self._mw.win.focus()
         save_folder = filedialog.askdirectory()
         self._runmeasw.save_folder_entry.delete(0, tk.END)
         self._runmeasw.save_folder_entry.insert(0, save_folder)
         self._runmeasw.win.lift()
-        self._runmeasw.win.focus_force()
+        self._runmeasw.win.focus()
 
 
     def runmeasw_update_win(self):
