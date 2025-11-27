@@ -1,7 +1,10 @@
 # %%
 from datetime import datetime
 import os
+import shutil
 import sys
+import threading
+import time
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
@@ -121,24 +124,36 @@ class XeprPlusRunMeasWindow():
             self.up_frame, text="Repeat until goal SNR:",
             variable=self.run_type, value=1)
         self.run_goal_snr_radiobutton.grid(row=1, column=0, sticky="w")
-        self.run_goal_snr_entry = ttk.Entry(self.up_frame)
+        self.run_goal_snr_entry = ttk.Entry(self.up_frame, width=5)
         self.run_goal_snr_entry.grid(row=1, column=1, sticky="ew")
-        self.run_for_time_radiobutton = tk.Radiobutton(
-            self.up_frame, text="Repeat for (hours):",
+        self.run_time_duration_radiobutton = tk.Radiobutton(
+            self.up_frame, text="Repeat for time duration:",
             variable=self.run_type, value=2)
-        self.run_for_time_radiobutton.grid(row=2, column=0, sticky="w")
-        self.run_for_time_entry = ttk.Entry(self.up_frame)
-        self.run_for_time_entry.grid(row=2, column=1, sticky="ew")
+        self.run_time_duration_radiobutton.grid(row=2, column=0, sticky="w")
+        self.run_time_duration_h_entry = ttk.Entry(self.up_frame, width=5)
+        self.run_time_duration_h_entry.grid(row=2, column=1, sticky="ew")
+        self.run_time_duration_h_label = ttk.Label(
+            self.up_frame, text="hours")
+        self.run_time_duration_h_label.grid(row=2, column=2)
+        self.run_time_duration_m_entry = ttk.Entry(self.up_frame, width=5)
+        self.run_time_duration_m_entry.grid(row=2, column=3, sticky="ew")
+        self.run_time_duration_m_label = ttk.Label(
+            self.up_frame, text="minutes")
+        self.run_time_duration_m_label.grid(row=2, column=4)
         self.empty_placeholder = tk.Frame(self.up_frame)  # For easthetics
-        self.empty_placeholder.grid(row=0, column=2, rowspan=3, sticky='nsew')
+        self.empty_placeholder.grid(row=0, column=5, rowspan=3, sticky='nsew')
         # Configure columns resize behavior
         self.up_frame.columnconfigure(0, weight=0)
         self.up_frame.columnconfigure(1, weight=1) 
-        self.up_frame.columnconfigure(2, weight=0) 
+        self.up_frame.columnconfigure(2, weight=10)
+        self.up_frame.columnconfigure(3, weight=1) 
+        self.up_frame.columnconfigure(4, weight=10)
+        self.up_frame.columnconfigure(5, weight=0) 
         # Initialize
         self.run_type.initialize(0)
         self.run_goal_snr_entry.config(state="disabled")
-        self.run_for_time_entry.config(state="disabled")
+        self.run_time_duration_h_entry.config(state="disabled")
+        self.run_time_duration_m_entry.config(state="disabled")
 
         # Middle frame
         self.mid_frame = tk.Frame(self.win, width=300, height=100)
@@ -153,11 +168,11 @@ class XeprPlusRunMeasWindow():
         self.save_folder_browse_button = tk.Button(
             self.mid_frame, text="Browse...")
         self.save_folder_browse_button.grid(row=0, column=2, sticky="w")
-        self.save_filename_label = ttk.Label(
-            self.mid_frame, text="Filename:")
-        self.save_filename_label.grid(row=1, column=0, sticky="w")
-        self.save_filename_entry = ttk.Entry(self.mid_frame)
-        self.save_filename_entry.grid(row=1, column=1, sticky="ew")
+        self.save_name_label = ttk.Label(
+            self.mid_frame, text="Dataset name:")
+        self.save_name_label.grid(row=1, column=0, sticky="w")
+        self.save_name_entry = ttk.Entry(self.mid_frame)
+        self.save_name_entry.grid(row=1, column=1, sticky="ew")
         # Configure columns resize behavior
         self.mid_frame.columnconfigure(0, weight=0)
         self.mid_frame.columnconfigure(1, weight=1) 
@@ -208,6 +223,8 @@ class XeprPlusGui():
                                     self._runmeasw.win.withdraw)
 
         # Connect
+        # TODO if not connected to API: disable some buttons
+        
         # Menubar
         self._mw.options_menu.entryconfig(0, command=self.mw_open_xepr_api)
         self._mw.options_menu.entryconfig(1, command=self.mw_close_xepr_api)
@@ -232,7 +249,7 @@ class XeprPlusGui():
             command=self.runmeasw_update_win)
         self._runmeasw.run_goal_snr_radiobutton.config(
             command=self.runmeasw_update_win)
-        self._runmeasw.run_for_time_radiobutton.config(
+        self._runmeasw.run_time_duration_radiobutton.config(
             command=self.runmeasw_update_win)
 
         # TODO add some if statement
@@ -259,6 +276,9 @@ class XeprPlusGui():
         status = self._logic.open_xepr_api()
         if status == 0:
             self.print_log("Connected to XeprAPI.")
+        elif status == -1:
+            self.print_log("Could not connect to XeprAPI. Please click " + 
+                           "'Processing>XeprAPI>Enable XeprAPI' to continue.")
 
 
     def mw_run_meas_button_clicked(self):
@@ -281,39 +301,72 @@ class XeprPlusGui():
         
         
     def runmeasw_run_button_clicked(self):
-        folder = self._runmeasw.save_folder_entry.get()
-        filename = self._runmeasw.save_filename_entry.get()
-        path = os.path.join(folder, filename)
-        if folder == "" or filename == "":
-            # Error: missing entries
+        save_folder = self._runmeasw.save_folder_entry.get()
+        save_name = self._runmeasw.save_name_entry.get()
+        path = os.path.join(save_folder, save_name)
+        
+        # Handle missing entries
+        if save_folder == "" or save_name == "":
             self._mw.win.focus()
             tk.messagebox.showerror("Run measurement",
-                                    "Please select a folder and a filename.")
+                                    "Please select a folder and a name.")
             self._runmeasw.win.lift()
             self._runmeasw.win.focus()
             return
+        
+        # Handle folder does not exist
+        if not os.path.isdir(save_folder):
+            self._mw.win.focus()
+            tk.messagebox.showerror("Run measurement",
+                                    "Please select an existing folder.")
+            self._runmeasw.win.lift()
+            self._runmeasw.win.focus()
+            
+        # Handle overwriting
+        # TODO handle overwriting also in the case of .DSC and .DTA files etc
         if os.path.isdir(path) or os.path.isfile(path):
-            self._runmeasw.win.focus_force()
+            self._mw.win.focus()
             res = tk.messagebox.askyesno(
                 "Run measurement",
                 f"A file or folder already exists at the chosen path" + 
                 f"\n{path}.\nOverwrite?")
-            if not res:
+            if res:
+                shutil.rmtree(path)
+            else:
                 self._runmeasw.win.lift()
-                self._runmeasw.win.focus_force()
+                self._runmeasw.win.focus()
                 return
+        
+        self._runmeasw.win.withdraw()
         if self._runmeasw.run_type.get() == 0:
-            self._logic.run_measurement(folder, filename)
+            self._logic.run_meas(save_folder, save_name)
         elif self._runmeasw.run_type.get() == 1:
             goal_snr = self._runmeasw.run_goal_snr_entry.get()
             # TODO add error handling for SNR here
-            self._logic.run_measurement_goal_snr(folder, filename, goal_snr)
+            self._logic.run_meas_goal_snr(save_folder,
+                                                 save_name,
+                                                 goal_snr)
         elif self._runmeasw.run_type.get() == 2:
-            for_time = self._runmeasw.run_for_time_entry.get()
-            # TODO add error handling for time here
-            # (and confirmation dialog as well????)
-            self._logic.run_measurement_for_time(folder, filename, for_time)
-        self._runmeasw.win.withdraw()
+            time_duration_h = self._runmeasw.run_time_duration_h_entry.get()
+            time_duration_m = self._runmeasw.run_time_duration_m_entry.get()
+            if not time_duration_h.isdigit() or not time_duration_m.isdigit():
+                self._mw.win.focus()
+                tk.messagebox.showerror("Run measurement",
+                                        "Time duration entries must be integers.")
+                self._runmeasw.win.lift()
+                self._runmeasw.win.focus()
+            time_duration_h = int(time_duration_h)
+            time_duration_m = int(time_duration_m)
+            
+            # Run measurement
+            self.meas_thread = threading.Thread(
+                target=self._logic.run_meas_time_duration,
+                args=(save_folder, save_name, time_duration_h, time_duration_m)
+            )
+            self.meas_thread.daemon = True  # Dies with main thread
+            self.meas_thread.start()
+            
+            self._update_gui(self.meas_thread)
 
 
     def runmeasw_save_folder_browse_button_clicked(self):
@@ -328,16 +381,37 @@ class XeprPlusGui():
     def runmeasw_update_win(self):
         if self._runmeasw.run_type.get() == 0:
             self._runmeasw.run_goal_snr_entry.config(state="disabled")
-            self._runmeasw.run_for_time_entry.config(state="disabled")
+            self._runmeasw.run_time_duration_h_entry.config(state="disabled")
+            self._runmeasw.run_time_duration_m_entry.config(state="disabled")
         elif self._runmeasw.run_type.get() == 1:
             self._runmeasw.run_goal_snr_entry.config(state="active")
-            self._runmeasw.run_for_time_entry.config(state="disabled")
+            self._runmeasw.run_time_duration_h_entry.config(state="disabled")
+            self._runmeasw.run_time_duration_m_entry.config(state="disabled")
         elif self._runmeasw.run_type.get() == 2:
             self._runmeasw.run_goal_snr_entry.config(state="disabled")
-            self._runmeasw.run_for_time_entry.config(state="active")
+            self._runmeasw.run_time_duration_h_entry.config(state="active")
+            self._runmeasw.run_time_duration_m_entry.config(state="active")
 
 
+    def _update_gui(self, thread):
+        """Check thread status and update GUI every 1s"""
+        if self.meas_thread and self.meas_thread.is_alive():
+            # Disable buttons while running
+            self._mw.new_exp_button.config(state="disabled")
+            self._mw.run_meas_button.config(state="disabled")
+            self.print_log("Measurement running...")
+            
+            # Schedule next check in 1000ms
+            self._mw.win.after(1000, lambda: self._update_gui(thread))
+        else:
+            # Re-enable buttons when done
+            self._mw.new_exp_button.config(state="active")
+            self._mw.run_meas_button.config(state="active")
+            self.print_log("Measurement completed.")
+        
+            
     def print_log(self, msg):
         now = datetime.strftime(datetime.now(), '%Y-%m-%d, %H:%M:%S >> ')
         self._mw.logs_area.insert(tk.END, now + msg + '\n')
+        self._mw.logs_area.see(tk.END)
 
