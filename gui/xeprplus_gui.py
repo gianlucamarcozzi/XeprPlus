@@ -11,6 +11,35 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
 
+
+class XeprPlusDataAnalysisWindow():
+    
+    def __init__(self, top_level):
+        self.win = tk.Toplevel(top_level)
+        self.win.title("Data Analysis")
+        self.win.geometry("1200x800")
+        self.win.minsize(1200, 800)
+        
+        # Left frame (buttons)
+        self.left_frame = tk.Frame(self.win, width=300, height=800)
+        self.left_frame.pack(side=tk.LEFT, expand=True, padx=25, pady=50)
+        
+        self.load_button = tk.Button(self.left_frame, text="Load")
+        self.load_button.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+        self.correct_frequency_button = tk.Button(self.left_frame, 
+                                                  text="Correct frequency")
+        self.correct_frequency_button.grid(
+             row=1, column=0, padx=5, pady=5, sticky="ew")
+        self.correct_baseline_button = tk.Button(self.left_frame,
+                                                 text="Correct baseline")
+        self.correct_baseline_button.grid(
+            row=2, column=0, padx=5, pady=5, sticky="ew")
+
+        # Right frame (plot)
+        self.right_frame = tk.Frame(self.win, width=900, height=800)
+        self.right_frame.pack(side=tk.LEFT, expand=True, padx=25, pady=50)
+
+        
 class XeprPlusMainWindow():
     
     def __init__(self):
@@ -99,9 +128,9 @@ class XeprPlusNewExpWindow():
         self.down_frame.pack(side=tk.TOP, expand=True, anchor='center')
 
         self.create_button = tk.Button(self.down_frame, text="Create")
-        self.create_button.grid(row=1, column=0, padx=15, pady=10, sticky="ew")
+        self.create_button.grid(row=0, column=0, padx=15, pady=10, sticky="ew")
         self.cancel_button = tk.Button(self.down_frame, text="Cancel")
-        self.cancel_button.grid(row=1, column=1, padx=15, pady=10, sticky="ew")
+        self.cancel_button.grid(row=0, column=1, padx=15, pady=10, sticky="ew")
     
         self.win.rowconfigure(0, weight=1)
         self.win.columnconfigure(0, weight=1)
@@ -214,6 +243,7 @@ class XeprPlusGui():
         self.print_log("Start XeprPlus.")
         self._newexpw = XeprPlusNewExpWindow(self._mw.win)
         self._runmeasw = XeprPlusRunMeasWindow(self._mw.win)
+        self._dataanw = XeprPlusDataAnalysisWindow(self._mw.win)
 
         self.executor = ThreadPoolExecutor(max_workers=1)  # Create once
         self.meas_fut = None  # Initialize as None
@@ -224,12 +254,15 @@ class XeprPlusGui():
         # Do not open as soon as called
         self._newexpw.win.withdraw()
         self._runmeasw.win.withdraw()
+        self._dataanw.win.withdraw()
         # When clicking "X" button, change default behavior
         self._mw.win.protocol("WM_DELETE_WINDOW", self._on_closing)
         self._newexpw.win.protocol("WM_DELETE_WINDOW",
                                    self._newexpw.win.withdraw)
         self._runmeasw.win.protocol("WM_DELETE_WINDOW",
-                                    self._runmeasw.win.withdraw)
+                                    self._runmeasw.win.withdraw)        
+        self._dataanw.win.protocol("WM_DELETE_WINDOW",
+                                   self._dataanw.win.withdraw)
 
         # Connect widgets to functions
         # Menubar
@@ -237,7 +270,10 @@ class XeprPlusGui():
         self._mw.options_menu.entryconfig(1, command=self.mw_close_xepr_api)
         # Buttons
         self._mw.new_exp_button.config(command=self.mw_new_exp_button_clicked)
-        self._mw.run_meas_button.config(command=self.mw_run_meas_button_clicked)
+        self._mw.run_meas_button.config(
+            command=self.mw_run_meas_button_clicked)
+        self._mw.data_analysis_button.config(
+            command=self.mw_data_analysis_button_clicked)
         
         self._newexpw.cancel_button.config(
             command=self.newexpw_cancel_button_clicked)
@@ -275,11 +311,23 @@ class XeprPlusGui():
         self._logic.close_xepr_api()
 
 
+    def mw_data_analysis_button_clicked(self):
+        if not self._dataanw.win.winfo_viewable():
+            self._dataanw.win.deiconify()
+            self._dataanw.win.lift()
+            self._dataanw.win.focus()
+        else:
+            self._dataanw.win.withdraw()
+
+        
     def mw_new_exp_button_clicked(self):
-        self._newexpw.win.deiconify()
-        self._newexpw.win.lift()
-        self._newexpw.win.focus()
-    
+        if not self._newexpw.win.winfo_viewable():
+            self._newexpw.win.deiconify()
+            self._newexpw.win.lift()
+            self._newexpw.win.focus()
+        else:
+            self._newexpw.win.withdraw()
+            
 
     def mw_open_xepr_api(self):
         status = self._logic.open_xepr_api()
@@ -293,9 +341,12 @@ class XeprPlusGui():
 
 
     def mw_run_meas_button_clicked(self):
-        self._runmeasw.win.deiconify()
-        self._runmeasw.win.lift()
-        self._runmeasw.win.focus()
+        if not self._runmeasw.win.winfo_viewable():
+            self._runmeasw.win.deiconify()
+            self._runmeasw.win.lift()
+            self._runmeasw.win.focus()
+        else:
+            self._runmeasw.win.withdraw()
 
 
     def newexpw_cancel_button_clicked(self):
@@ -391,6 +442,7 @@ class XeprPlusGui():
             args = (save_folder, save_name, time_duration_h, time_duration_m)
             meas_fun = self._logic.run_meas_time_duration
         self.meas_fut = self.executor.submit(meas_fun, *args)
+        # update_gui as soon as starts and at the end
         self._update_gui()
         self.meas_fut.add_done_callback(self._update_gui)
         '''
@@ -431,7 +483,7 @@ class XeprPlusGui():
 
     def _update_gui(self):
         """Check thread status and update GUI every 1s"""
-        if self._logic.xepr and self._logic.xepr.XeprActive() and not self.is_running:
+        if self._logic.xepr and self._logic.xepr.XeprActive():
             self._mw.new_exp_button.config(state="active")
             self._mw.run_meas_button.config(state="active")   
         else:
