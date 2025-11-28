@@ -1,5 +1,7 @@
 # %%
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+import glob
 import os
 import shutil
 import sys
@@ -13,7 +15,7 @@ class XeprPlusMainWindow():
     
     def __init__(self):
         self.win = tk.Tk()
-        self.win.title("Xepr Plus")
+        self.win.title("XeprPlus")
         self.win.geometry("510x260")
         self.win.minsize(510, 260)
 
@@ -30,8 +32,8 @@ class XeprPlusMainWindow():
 
         # Options menu
         self.options_menu = tk.Menu(self.menubar, tearoff=0)
-        self.options_menu.add_command(label="Open Xepr API")
-        self.options_menu.add_command(label="Close Xepr API")
+        self.options_menu.add_command(label="Open XeprAPI")
+        self.options_menu.add_command(label="Close XeprAPI")
         self.menubar.add_cascade(label="Options", menu=self.options_menu)
 
         self.win.config(menu=self.menubar)
@@ -63,6 +65,10 @@ class XeprPlusMainWindow():
         self.win.rowconfigure(2, weight=0)
         self.win.columnconfigure(0, weight=1)
 
+        self.new_exp_button.config(state="disabled")
+        self.run_meas_button.config(state="disabled")
+        
+        
 class XeprPlusNewExpWindow():
 
     def __init__(self, top_level):
@@ -209,6 +215,9 @@ class XeprPlusGui():
         self._newexpw = XeprPlusNewExpWindow(self._mw.win)
         self._runmeasw = XeprPlusRunMeasWindow(self._mw.win)
 
+        self.executor = ThreadPoolExecutor(max_workers=1)  # Create once
+        self.meas_fut = None  # Initialize as None
+        
         # TODO remove this when features are implemented
         self._runmeasw.run_goal_snr_radiobutton.config(state="disabled")
         
@@ -222,9 +231,7 @@ class XeprPlusGui():
         self._runmeasw.win.protocol("WM_DELETE_WINDOW",
                                     self._runmeasw.win.withdraw)
 
-        # Connect
-        # TODO if not connected to API: disable some buttons
-        
+        # Connect widgets to functions
         # Menubar
         self._mw.options_menu.entryconfig(0, command=self.mw_open_xepr_api)
         self._mw.options_menu.entryconfig(1, command=self.mw_close_xepr_api)
@@ -255,11 +262,13 @@ class XeprPlusGui():
         # TODO add some if statement
         # Auto connect to XeprAPI at startup
         self.mw_open_xepr_api()
+        
 
 
     def _on_closing(self):
         self._mw.win.destroy()
-        self.mw_close_xepr_api()
+        if self._logic.xepr:
+            self.mw_close_xepr_api()
         
         
     def mw_close_xepr_api(self):
@@ -277,8 +286,10 @@ class XeprPlusGui():
         if status == 0:
             self.print_log("Connected to XeprAPI.")
         elif status == -1:
-            self.print_log("Could not connect to XeprAPI. Please click " + 
-                           "'Processing>XeprAPI>Enable XeprAPI' to continue.")
+            self.print_log("Could not connect to XeprAPI. In Xepr, click " + 
+                           "'Processing>XeprAPI>Enable XeprAPI'. " + 
+                           "In XeprPlus, click 'Options>Open XeprAPI.'")
+        self._update_gui()
 
 
     def mw_run_meas_button_clicked(self):
@@ -323,15 +334,30 @@ class XeprPlusGui():
             self._runmeasw.win.focus()
             
         # Handle overwriting
-        # TODO handle overwriting also in the case of .DSC and .DTA files etc
-        if os.path.isdir(path) or os.path.isfile(path):
+        if os.path.isdir(path):
+            # Folder
             self._mw.win.focus()
             res = tk.messagebox.askyesno(
                 "Run measurement",
-                f"A file or folder already exists at the chosen path" + 
-                f"\n{path}.\nOverwrite?")
+                "A folder already exists at the chosen path:\n\n" + path + 
+                "\n\nDelete it and continue?")
             if res:
                 shutil.rmtree(path)
+            else:
+                self._runmeasw.win.lift()
+                self._runmeasw.win.focus()
+                return
+        match_files = glob.glob(path + ".*")
+        if match_files:
+            fstr = "".join([s[s.find(save_name):] + '\n' for s in match_files])
+            self._mw.win.focus()
+            res = tk.messagebox.askyesno(
+                "Run measurement",
+                "One or more files already exist in the folder:\n\n" + fstr + 
+                "\nDelete all and continue?")
+            if res:
+                for f in match_files:
+                    os.remove(f)
             else:
                 self._runmeasw.win.lift()
                 self._runmeasw.win.focus()
@@ -339,13 +365,18 @@ class XeprPlusGui():
         
         self._runmeasw.win.withdraw()
         if self._runmeasw.run_type.get() == 0:
-            self._logic.run_meas(save_folder, save_name)
+            args = (save_folder, save_name)
+            meas_fun = self._logic.run_meas
         elif self._runmeasw.run_type.get() == 1:
             goal_snr = self._runmeasw.run_goal_snr_entry.get()
-            # TODO add error handling for SNR here
-            self._logic.run_meas_goal_snr(save_folder,
-                                                 save_name,
-                                                 goal_snr)
+            if not goal_snr.isdigit():
+                self._mw.win.focus()
+                tk.messagebox.showerror("Run measurement",
+                                        "Time duration entries must be integers.")
+                self._runmeasw.win.lift()
+                self._runmeasw.win.focus()
+            args = (save_folder, save_name, int(goal_snr))
+            meas_fun = self._logic.run_meas_goal_snr
         elif self._runmeasw.run_type.get() == 2:
             time_duration_h = self._runmeasw.run_time_duration_h_entry.get()
             time_duration_m = self._runmeasw.run_time_duration_m_entry.get()
@@ -357,17 +388,22 @@ class XeprPlusGui():
                 self._runmeasw.win.focus()
             time_duration_h = int(time_duration_h)
             time_duration_m = int(time_duration_m)
-            
-            # Run measurement
-            self.meas_thread = threading.Thread(
-                target=self._logic.run_meas_time_duration,
-                args=(save_folder, save_name, time_duration_h, time_duration_m)
-            )
-            self.meas_thread.daemon = True  # Dies with main thread
-            self.meas_thread.start()
-            
-            self._update_gui(self.meas_thread)
-
+            args = (save_folder, save_name, time_duration_h, time_duration_m)
+            meas_fun = self._logic.run_meas_time_duration
+        self.meas_fut = self.executor.submit(meas_fun, *args)
+        self._update_gui()
+        self.meas_fut.add_done_callback(self._update_gui)
+        '''
+        self.meas_thread = threading.Thread(
+            target=self._logic.run_meas_time_duration,
+            args=(save_folder, save_name, time_duration_h, time_duration_m)
+        )
+        self.meas_thread.daemon = True  # Dies with main thread
+        self.meas_thread.start()
+        self.is_running = 1
+        
+        self._update_gui()
+        '''
 
     def runmeasw_save_folder_browse_button_clicked(self):
         self._mw.win.focus()
@@ -393,8 +429,28 @@ class XeprPlusGui():
             self._runmeasw.run_time_duration_m_entry.config(state="active")
 
 
-    def _update_gui(self, thread):
+    def _update_gui(self):
         """Check thread status and update GUI every 1s"""
+        if self._logic.xepr and self._logic.xepr.XeprActive() and not self.is_running:
+            self._mw.new_exp_button.config(state="active")
+            self._mw.run_meas_button.config(state="active")   
+        else:
+            self._mw.new_exp_button.config(state="disabled")
+            self._mw.run_meas_button.config(state="disabled")
+        if self.meas_fut:
+            if self.meas_fut.running():
+                exp_name = self._runmeasw.save_name_entry.get()
+                self.print_log("Started experiment '" + exp_name + "'.")
+                self._mw.new_exp_button.config(state="disabled")
+                self._mw.run_meas_button.config(state="disabled")   
+            elif self.meas_fut.done():
+                exp_name = self._runmeasw.save_name_entry.get()
+                self.print_log("Finished experiment '" + exp_name + "'.")
+                self.meas_fut = None
+                self._mw.new_exp_button.config(state="active")
+                self._mw.run_meas_button.config(state="active")   
+                
+        '''
         if self.meas_thread and self.meas_thread.is_alive():
             # Disable buttons while running
             self._mw.new_exp_button.config(state="disabled")
@@ -402,12 +458,15 @@ class XeprPlusGui():
             self.print_log("Measurement running...")
             
             # Schedule next check in 1000ms
-            self._mw.win.after(1000, lambda: self._update_gui(thread))
+            
         else:
             # Re-enable buttons when done
             self._mw.new_exp_button.config(state="active")
             self._mw.run_meas_button.config(state="active")
             self.print_log("Measurement completed.")
+        '''
+        
+        # self._mw.win.after(1000, self._update_gui)
         
             
     def print_log(self, msg):
