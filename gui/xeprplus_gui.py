@@ -2,6 +2,10 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import glob
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+from matplotlib.figure import Figure
+import numpy as np
 import os
 import shutil
 import sys
@@ -22,7 +26,7 @@ class XeprPlusDataAnalysisWindow():
         
         # Left frame (buttons)
         self.left_frame = tk.Frame(self.win, width=300, height=800)
-        self.left_frame.pack(side=tk.LEFT, expand=True, padx=25, pady=50)
+        self.left_frame.pack(side=tk.LEFT, expand=False, padx=25, pady=50)
         
         self.load_button = tk.Button(self.left_frame, text="Load")
         self.load_button.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
@@ -37,9 +41,19 @@ class XeprPlusDataAnalysisWindow():
 
         # Right frame (plot)
         self.right_frame = tk.Frame(self.win, width=900, height=800)
-        self.right_frame.pack(side=tk.LEFT, expand=True, padx=25, pady=50)
+        self.right_frame.pack(side=tk.LEFT, expand=True, padx=5, pady=5)
 
-        
+        fig = Figure(figsize=(7.5, 6), dpi=100)
+        ax = fig.add_subplot(111)
+        canvas = FigureCanvasTkAgg(fig, master=self.right_frame)
+        canvas_widget = canvas.get_tk_widget()
+        canvas_widget.pack(fill=tk.BOTH, expand=True)
+        toolbar = NavigationToolbar2Tk(canvas, self.right_frame)
+        toolbar.update()
+        toolbar.pack(fill=tk.X)
+
+        canvas.draw()
+
 class XeprPlusMainWindow():
     
     def __init__(self):
@@ -255,7 +269,7 @@ class XeprPlusGui():
         self._newexpw.win.withdraw()
         self._runmeasw.win.withdraw()
         self._dataanw.win.withdraw()
-        # When clicking "X" button, change default behavior
+        # Change default behavior of clicking "X" button
         self._mw.win.protocol("WM_DELETE_WINDOW", self._on_closing)
         self._newexpw.win.protocol("WM_DELETE_WINDOW",
                                    self._newexpw.win.withdraw)
@@ -268,6 +282,7 @@ class XeprPlusGui():
         # Menubar
         self._mw.options_menu.entryconfig(0, command=self.mw_open_xepr_api)
         self._mw.options_menu.entryconfig(1, command=self.mw_close_xepr_api)
+
         # Buttons
         self._mw.new_exp_button.config(command=self.mw_new_exp_button_clicked)
         self._mw.run_meas_button.config(
@@ -286,7 +301,7 @@ class XeprPlusGui():
             command=self.runmeasw_cancel_button_clicked)
         self._runmeasw.run_button.config(
             command=self.runmeasw_run_button_clicked)
-
+        
         # Radiobuttons
         self._runmeasw.run_simple_meas_radiobutton.config(
             command=self.runmeasw_update_win)
@@ -294,6 +309,13 @@ class XeprPlusGui():
             command=self.runmeasw_update_win)
         self._runmeasw.run_time_duration_radiobutton.config(
             command=self.runmeasw_update_win)
+
+        self._dataanw.load_button.config(
+            command=self.dataanw_load)        
+        self._dataanw.correct_frequency_button.config(
+            command=self.dataanw_correct_frequency)
+        self._dataanw.correct_baseline_button.config(
+            command=self.dataanw_correct_baseline)
 
         # TODO add some if statement
         # Auto connect to XeprAPI at startup
@@ -307,6 +329,29 @@ class XeprPlusGui():
             self.mw_close_xepr_api()
         
         
+    def dataanw_load(self):
+        self._mw.win.focus()
+        load_file = filedialog.askopenfile()
+        # Load from memoty to Xepr
+        self._logic._command_wait(
+            self._logic.xepr.XeprCmds.vpLoad, load_file.name)
+        # Load from Xepr to window
+        
+
+        # self._runmeasw.save_folder_entry.delete(0, tk.END)
+        # self._runmeasw.save_folder_entry.insert(0, save_folder)
+        # self._runmeasw.win.lift()
+        # self._runmeasw.win.focus()
+
+
+    def dataanw_correct_frequency(self):
+        return
+    
+    
+    def dataanw_correct_baseline(self):
+        return
+    
+
     def mw_close_xepr_api(self):
         self._logic.close_xepr_api()
 
@@ -482,7 +527,6 @@ class XeprPlusGui():
 
 
     def _update_gui(self):
-        """Check thread status and update GUI every 1s"""
         if self._logic.xepr and self._logic.xepr.XeprActive():
             self._mw.new_exp_button.config(state="active")
             self._mw.run_meas_button.config(state="active")   
