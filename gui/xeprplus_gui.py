@@ -53,7 +53,8 @@ class XeprPlusDataAnalysisWindow():
         toolbar.pack(fill=tk.X)
 
         canvas.draw()
-
+        
+        
 class XeprPlusMainWindow():
     
     def __init__(self):
@@ -325,23 +326,29 @@ class XeprPlusGui():
 
     def _on_closing(self):
         self._mw.win.destroy()
-        if self._logic.xepr:
-            self.mw_close_xepr_api()
+        self.close_xepr_api()
         
         
     def dataanw_load(self):
         self._mw.win.focus()
-        load_file = filedialog.askopenfile()
-        # Load from memoty to Xepr
-        self._logic._command_wait(
-            self._logic.xepr.XeprCmds.vpLoad, load_file.name)
-        # Load from Xepr to window
+        load_file = filedialog.askopenfiles(
+            parent=self._dataanw.win, title='Load files')
+        # TODO check extension file
+        self._dataanw.win.deiconify()
+        self._dataanw.win.lift()
+        self._dataanw.win.focus()
         
+        for f in load_file:
+            # Load from memory to Xepr secondary viewport
+            self._logic._command_wait(
+                self._logic.xepr.XeprCmds.vpLoad, [f.name, 'None', 'Secondary'])
+            # Load from Xepr to window
+            dset = self._logic.xepr.XeprDataset(xeprset="secondary")
+            self._dataanw.x = dset.X
+            self._dataanw.spc = dset.O
+            mw_freq = dset.getSPLReal("MWFQ")
+            
 
-        # self._runmeasw.save_folder_entry.delete(0, tk.END)
-        # self._runmeasw.save_folder_entry.insert(0, save_folder)
-        # self._runmeasw.win.lift()
-        # self._runmeasw.win.focus()
 
 
     def dataanw_correct_frequency(self):
@@ -353,7 +360,8 @@ class XeprPlusGui():
     
 
     def mw_close_xepr_api(self):
-        self._logic.close_xepr_api()
+        if self._logic.xepr:
+            self._logic.close_xepr_api()
 
 
     def mw_data_analysis_button_clicked(self):
@@ -504,7 +512,8 @@ class XeprPlusGui():
 
     def runmeasw_save_folder_browse_button_clicked(self):
         self._mw.win.focus()
-        save_folder = filedialog.askdirectory()
+        save_folder = filedialog.askdirectory(
+            parent=self._runmeasw.win, title="Select folder")
         self._runmeasw.save_folder_entry.delete(0, tk.END)
         self._runmeasw.save_folder_entry.insert(0, save_folder)
         self._runmeasw.win.lift()
