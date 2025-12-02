@@ -75,15 +75,6 @@ class XeprPlusLogic():
         self.xepr.XeprClose()
 
 
-    def open_xepr_api(self):
-        try:
-            self.xepr = XeprAPI.Xepr(verbose=False)
-            self.hidden_exp = self.xepr.XeprExperiment('AcqHidden')
-            return 0
-        except:
-            return -1
-
-
     def create_new_experiment(self, exp_type):
         if exp_type == 0:
             self.exp_names.append(self._check_exp_name('cwEPR'))
@@ -104,6 +95,21 @@ class XeprPlusLogic():
         self.exps.append(exp)
         
         
+    def load_data(self, path, viewport):
+        # Viewport should be 'primary' or 'secondary'
+        args = [path, 'None', viewport]
+        self._command_wait(self._logic.xepr.XeprCmds.vpLoad, *args)
+
+
+    def open_xepr_api(self):
+        try:
+            self.xepr = XeprAPI.Xepr(verbose=False)
+            self.hidden_exp = self.xepr.XeprExperiment('AcqHidden')
+            return 0
+        except:
+            return -1
+
+
     def run_meas(self, folder, meas_name):
         cur_exp = self.xepr.XeprExperiment()
         self._command_wait(cur_exp.aqExpRunAndWait, waiting_time=5)

@@ -2,11 +2,13 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import glob
+from matplotlib import rcParams
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
 from matplotlib.figure import Figure
 import numpy as np
 import os
+import peasyspin as pes
 import shutil
 import sys
 import threading
@@ -14,45 +16,125 @@ import time
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
+from types import SimpleNamespace
+from xeprplus_widgets.long_press_button import LongPressButton
+from xeprplus_widgets.placeholder_entry import PlaceholderEntry
+from xeprplus_widgets.radio_treeview import RadioTreeview
 
 
 class XeprPlusDataAnalysisWindow():
     
     def __init__(self, top_level):
+        self.dsets = np.empty(0, dtype=object)
+
         self.win = tk.Toplevel(top_level)
         self.win.title("Data Analysis")
         self.win.geometry("1200x800")
         self.win.minsize(1200, 800)
         
         # Left frame (buttons)
-        self.left_frame = tk.Frame(self.win, width=300, height=800)
+        self.left_frame = ttk.Frame(self.win, width=300, height=800)
         self.left_frame.pack(side=tk.LEFT, expand=False, padx=25, pady=50)
+
+        # Left frame, upper part: advanced options
+        self.left_up_frame = ttk.Frame(self.left_frame)
+        self.left_up_frame.pack(side=tk.TOP, pady=20)
+        self.advanced_options_button = ttk.Button(
+            self.left_up_frame, text="Advanced options")
+        self.advanced_options_button.grid(
+            row=0, column=0, padx=5, pady=5, sticky="ew")
         
-        self.load_button = tk.Button(self.left_frame, text="Load")
-        self.load_button.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
-        self.correct_frequency_button = tk.Button(self.left_frame, 
+        # Left frame, middle part: buttons for file, figure
+        self.left_mid_frame = ttk.Frame(self.left_frame)
+        self.left_mid_frame.pack(side=tk.TOP, pady=20)
+        self.clear_figure_button = LongPressButton(
+            self.left_mid_frame, text="Clear figure (hold)")
+        self.clear_figure_button.grid(
+            row=0, column=0, padx=5, pady=5, sticky="ew")
+        self.load_dataset_button = tk.Button(self.left_mid_frame,
+                                             text="Load dataset")
+        self.load_dataset_button.grid(
+            row=1, column=0, padx=5, pady=5, sticky="ew")
+        self.load_folder_button = tk.Button(self.left_mid_frame,
+                                             text="Load folder")
+        self.load_folder_button.grid(
+            row=2, column=0, padx=5, pady=5, sticky="ew")
+        '''
+        self.plot_dataset_button = ttk.Button(
+            self.left_mid_frame, text="Plot dataset")
+        self.plot_dataset_button.grid(
+            row=3, column=0, padx=5, pady=5, sticky="ew")
+        self.plot_dataset_entry_placeholder = "1,4-8,..."
+        self.plot_dataset_entry = PlaceholderEntry(
+            self.left_mid_frame,
+            placeholder=self.plot_dataset_entry_placeholder)
+        self.plot_dataset_entry.grid(
+            row=4, column=0, padx=5, pady=0, sticky="ew")
+        '''
+        # Left frame, bottom part: buttons for data analysis
+        self.left_down_frame = ttk.Frame(self.left_frame)
+        self.left_down_frame.pack(side=tk.TOP, pady=20)
+        self.correct_frequency_button = tk.Button(self.left_down_frame, 
                                                   text="Correct frequency")
         self.correct_frequency_button.grid(
              row=1, column=0, padx=5, pady=5, sticky="ew")
-        self.correct_baseline_button = tk.Button(self.left_frame,
+        self.correct_baseline_button = tk.Button(self.left_down_frame,
                                                  text="Correct baseline")
         self.correct_baseline_button.grid(
             row=2, column=0, padx=5, pady=5, sticky="ew")
 
-        # Right frame (plot)
-        self.right_frame = tk.Frame(self.win, width=900, height=800)
-        self.right_frame.pack(side=tk.LEFT, expand=True, padx=5, pady=5)
+        # Right frame
+        # Load dataset on top, notebook with plot canvases in the middle and
+        # navigation toolbar at the bottom.
 
-        fig = Figure(figsize=(7.5, 6), dpi=100)
-        ax = fig.add_subplot(111)
-        canvas = FigureCanvasTkAgg(fig, master=self.right_frame)
-        canvas_widget = canvas.get_tk_widget()
-        canvas_widget.pack(fill=tk.BOTH, expand=True)
-        toolbar = NavigationToolbar2Tk(canvas, self.right_frame)
-        toolbar.update()
-        toolbar.pack(fill=tk.X)
+        # Frame: general frame on the right side
+        self.right_frame = ttk.Frame(self.win, width=900, height=800)
+        self.right_frame.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
 
-        canvas.draw()
+        # Load dataset frame
+        self.dataset_frame = ttk.Frame(self.right_frame)
+        self.dataset_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH)
+        self.dataset_treeview = RadioTreeview(
+            self.dataset_frame, columns=(), show="tree")
+        self.dataset_treeview.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
+        self.dataset_scrollbar = ttk.Scrollbar(
+            self.dataset_frame, orient="vertical",
+            command=self.dataset_treeview.yview)
+        self.dataset_scrollbar.pack(side=tk.RIGHT, fill="y")
+        self.dataset_treeview.configure(
+            yscrollcommand=self.dataset_scrollbar.set)
+
+        # Notebook
+        self.nb = ttk.Notebook(self.right_frame)
+        self.nb.pack(expand=True, fill=tk.BOTH)
+        self.nb_tab1 = ttk.Frame(self.nb)
+        self.nb.add(self.nb_tab1, text="Fig 1")
+
+        # Plot canvas
+        self.fig = Figure(figsize=(7.5, 6), dpi=100)
+        self.ax = self.fig.add_subplot(111)
+        self.fig.tight_layout()
+        self.plot_colors = rcParams['axes.prop_cycle'].by_key()['color']
+        self.selected_colors = []
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.nb_tab1)
+        self.canvas_widget = self.canvas.get_tk_widget()
+        self.canvas_widget.grid(row=0, column=0, sticky="nsew")
+
+        # Navigation toolbar
+        self.toolbar = NavigationToolbar2Tk(self.canvas, self.nb_tab1, pack_toolbar=False)
+        self.toolbar.grid(row=1, column=0)
+        self.toolbar.update()
+        self.nb_tab1.grid_rowconfigure(0, weight=1)
+        self.nb_tab1.grid_rowconfigure(1, weight=0)
+        self.nb_tab1.grid_columnconfigure(0, weight=1)
+        
+        # Configure rows and columns for general right frame
+        self.right_frame.grid_rowconfigure(1, weight=1)
+        self.right_frame.grid_columnconfigure(0, weight=0)
+        self.right_frame.grid_columnconfigure(1, weight=1)
+        
+        # Draw
+        self.canvas.draw()
         
         
 class XeprPlusMainWindow():
@@ -87,7 +169,7 @@ class XeprPlusMainWindow():
         self.logs_area.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
         
         # Buttons
-        self.bottom_frame = tk.Frame(self.win, height=5, width=200)
+        self.bottom_frame = ttk.Frame(self.win, height=5, width=200)
         self.bottom_frame.grid(row=2, column=0, padx=5, pady=5, sticky="ew")
         self.new_exp_button = tk.Button(self.bottom_frame, text="New exp")
         self.new_exp_button.grid(row=0, column=0)
@@ -123,7 +205,7 @@ class XeprPlusNewExpWindow():
         self.win.resizable(False, False)
 
         # Upper frame (radio buttons)
-        self.up_frame = tk.Frame(self.win, width=300, height=100)
+        self.up_frame = ttk.Frame(self.win, width=300, height=100)
         self.up_frame.pack(side=tk.TOP, expand=True, anchor='center')
 
         self.exp_type = tk.IntVar()
@@ -139,7 +221,7 @@ class XeprPlusNewExpWindow():
         self.exp_type.initialize(0)
         
         # Bottom frame (buttons)
-        self.down_frame = tk.Frame(self.win, width=300, height=100)
+        self.down_frame = ttk.Frame(self.win, width=300, height=100)
         self.down_frame.pack(side=tk.TOP, expand=True, anchor='center')
 
         self.create_button = tk.Button(self.down_frame, text="Create")
@@ -161,7 +243,7 @@ class XeprPlusRunMeasWindow():
         self.win.resizable(True, False)
 
         # Upper frame (radio buttons)
-        self.up_frame = tk.Frame(self.win, width=300, height=100)
+        self.up_frame = ttk.Frame(self.win, width=300, height=100)
         self.up_frame.pack(
             side=tk.TOP, expand=True, fill=tk.BOTH, padx=10, anchor='center')
 
@@ -190,7 +272,7 @@ class XeprPlusRunMeasWindow():
         self.run_time_duration_m_label = ttk.Label(
             self.up_frame, text="minutes")
         self.run_time_duration_m_label.grid(row=2, column=4)
-        self.empty_placeholder = tk.Frame(self.up_frame)  # For easthetics
+        self.empty_placeholder = ttk.Frame(self.up_frame)  # For easthetics
         self.empty_placeholder.grid(row=0, column=5, rowspan=3, sticky='nsew')
         # Configure columns resize behavior
         self.up_frame.columnconfigure(0, weight=0)
@@ -206,7 +288,7 @@ class XeprPlusRunMeasWindow():
         self.run_time_duration_m_entry.config(state="disabled")
 
         # Middle frame
-        self.mid_frame = tk.Frame(self.win, width=300, height=100)
+        self.mid_frame = ttk.Frame(self.win, width=300, height=100)
         self.mid_frame.pack(
             side=tk.TOP, expand=True, fill=tk.BOTH, padx=10, anchor='center')
 
@@ -229,7 +311,7 @@ class XeprPlusRunMeasWindow():
         self.mid_frame.columnconfigure(2, weight=0) 
 
         # Bottom frame (buttons)
-        self.down_frame = tk.Frame(self.win, width=300, height=100)
+        self.down_frame = ttk.Frame(self.win, width=300, height=100)
         self.down_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, anchor="center")
 
         self.run_button = tk.Button(self.down_frame, text="Run")
@@ -311,12 +393,21 @@ class XeprPlusGui():
         self._runmeasw.run_time_duration_radiobutton.config(
             command=self.runmeasw_update_win)
 
-        self._dataanw.load_button.config(
-            command=self.dataanw_load)        
-        self._dataanw.correct_frequency_button.config(
-            command=self.dataanw_correct_frequency)
+        # TODO connect selft._dataanw.advanced_options_button
         self._dataanw.correct_baseline_button.config(
             command=self.dataanw_correct_baseline)
+        self._dataanw.clear_figure_button.config(
+            command=self.dataanw_clear_figure_button_clicked)
+        self._dataanw.correct_frequency_button.config(
+            command=self.dataanw_correct_frequency)
+        self._dataanw.dataset_treeview.bind(
+            "<Button-1>", self.dataanw_dataset_treeview_clicked)
+        self._dataanw.load_dataset_button.config(
+            command=self.dataanw_load_dataset_button_clicked)
+        self._dataanw.load_folder_button.config(
+            command=self.dataanw_load_folder_button_clicked)
+        # self._dataanw.plot_dataset_button.config(
+        #     command=self.dataanw_plot_dataset)
 
         # TODO add some if statement
         # Auto connect to XeprAPI at startup
@@ -326,38 +417,122 @@ class XeprPlusGui():
 
     def _on_closing(self):
         self._mw.win.destroy()
-        self.close_xepr_api()
+        self.mw_close_xepr_api()
         
-        
-    def dataanw_load(self):
+
+    def dataanw_clear_figure_button_clicked(self):
+        self.dataanw_untoggle_treeview()
+        self._dataanw.ax.clear()
+        self._dataanw.canvas.draw()
+            
+
+    def dataanw_correct_baseline(self):
+        return
+    
+    
+    def dataanw_correct_frequency(self):
+        iset = self._dataanw.dataset_combobox.current()
+        dset = self._dataanw.dsets[iset]
+        mwf = 9.6
+        x2 = dset.x * mwf / dset.params["mw_freq"] * 1e9
+        self._dataanw.ax.plot(x2, dset.o)
+        self._dataanw.canvas.draw()
+        return
+    
+    
+    def dataanw_dataset_treeview_clicked(self, event):
+        '''
+        iset = self._dataanw.dataset_combobox.current()
+        dset = self._dataanw.dsets[iset]
+        # Plot
+        self._dataanw.ax.clear()
+        self._dataanw.ax.plot(dset.x, dset.o)
+        self._dataanw.canvas.draw()
+        '''
+        old_selected_iid = self._dataanw.dataset_treeview.selected_iid.copy()
+        row = self._dataanw.dataset_treeview.on_click(event)
+        if row != -1:
+            # The click hit a radiobutton
+            if row in self._dataanw.dataset_treeview.selected_iid:
+                # The radiobutton is now clicked, add to the canvas
+                idset = self._dataanw.dataset_treeview.index(row)
+                dset = self._dataanw.dsets[idset]
+                color = self.dataanw_get_new_plot_color()
+                self._dataanw.ax.plot(dset.x, dset.o, color=color)
+                self._dataanw.canvas.draw()
+            else:
+                # The radiobutton is now unclicked, remove from canvas
+                iplot = old_selected_iid.index(row)
+                self._dataanw.ax.lines[iplot].remove()
+                self.dataanw_remove_selected_color(iplot)
+                self._dataanw.canvas.draw()
+                self._dataanw.ax.set_prop_cycle(None)
+
+
+    def dataanw_get_new_plot_color(self):
+        i = 0
+        while True:
+            if i not in self._dataanw.selected_colors:
+                self._dataanw.selected_colors.append(i)
+                return self._dataanw.plot_colors[i]
+            i += 1
+
+
+    def dataanw_load_dataset_button_clicked(self):
         self._mw.win.focus()
-        load_file = filedialog.askopenfiles(
+        load_files = filedialog.askopenfiles(
             parent=self._dataanw.win, title='Load files')
         # TODO check extension file
         self._dataanw.win.deiconify()
         self._dataanw.win.lift()
         self._dataanw.win.focus()
         
-        for f in load_file:
-            # Load from memory to Xepr secondary viewport
-            self._logic._command_wait(
-                self._logic.xepr.XeprCmds.vpLoad, [f.name, 'None', 'Secondary'])
-            # Load from Xepr to window
-            dset = self._logic.xepr.XeprDataset(xeprset="secondary")
-            self._dataanw.x = dset.X
-            self._dataanw.spc = dset.O
-            mw_freq = dset.getSPLReal("MWFQ")
+        # TODO Avoid double load of files due to different extensions (DTA DSC)
+        for f in load_files:
+            self.dataanw_load_single_dataset(f.name)
+
+
+    def dataanw_load_folder_button_clicked(self):
+        self._mw.win.focus()
+        load_folder = filedialog.askdirectory(parent=self._dataanw.win, 
+                                              title='Load folder')
+        self._dataanw.win.deiconify()
+        self._dataanw.win.lift()
+        self._dataanw.win.focus()
+        
+        # TODO Avoid double load of files due to different extensions (DTA DSC)
+        load_files = sorted(os.listdir(load_folder))
+        # for f in load_files:
             
+        for f in load_files:
+            self.dataanw_load_single_dataset(os.path.join(load_folder, f))
+
+        
+    def dataanw_load_single_dataset(self, path_to_file):
+        # Load from memory to Xepr secondary viewport
+        self._logic.load_data(path_to_file, 'secondary')
+        # Load from Xepr to window
+        dset = self._logic.get_dataset(xeprset="secondary")
+        # Store in dsets
+        params = {"title": dset.getTitle(),
+                  "mw_freq": dset.getSPLReal("MWFQ"),
+                  "mw_": dset.getSPLReal("MWPW")}
+        ds = SimpleNamespace(x=dset.X, o=dset.O, params=params)
+        self._dataanw.dsets = np.append(self._dataanw.dsets, ds)
+        # Append to treeview
+        self._dataanw.dataset_treeview.add_radio_item("",
+                                                      tk.END,
+                                                      params['title'])
 
 
+    def dataanw_untoggle_treeview(self):
+        selected_iid = self._dataanw.dataset_treeview.selected_iid.copy()
+        for iid in selected_iid:
+            self._dataanw.dataset_treeview.toggle_radio(iid)
 
-    def dataanw_correct_frequency(self):
-        return
-    
-    
-    def dataanw_correct_baseline(self):
-        return
-    
+
+    def dataanw_remove_selected_color(self, id_remove):
+        self._dataanw.selected_colors.pop(id_remove)
 
     def mw_close_xepr_api(self):
         if self._logic.xepr:
@@ -540,14 +715,14 @@ class XeprPlusGui():
             self._mw.new_exp_button.config(state="active")
             self._mw.run_meas_button.config(state="active")   
         else:
-            self._mw.new_exp_button.config(state="disabled")
-            self._mw.run_meas_button.config(state="disabled")
+            self._mw.new_exp_button.config(state="disabled") #
+            self._mw.run_meas_button.config(state="disabled") #
         if self.meas_fut:
             if self.meas_fut.running():
                 exp_name = self._runmeasw.save_name_entry.get()
                 self.print_log("Started experiment '" + exp_name + "'.")
-                self._mw.new_exp_button.config(state="disabled")
-                self._mw.run_meas_button.config(state="disabled")   
+                self._mw.new_exp_button.config(state="disabled") #
+                self._mw.run_meas_button.config(state="disabled") #  
             elif self.meas_fut.done():
                 exp_name = self._runmeasw.save_name_entry.get()
                 self.print_log("Finished experiment '" + exp_name + "'.")
