@@ -18,7 +18,6 @@ from tkinter import filedialog
 from tkinter import ttk
 from types import SimpleNamespace
 from xeprplus_widgets.long_press_button import LongPressButton
-from xeprplus_widgets.placeholder_entry import PlaceholderEntry
 from xeprplus_widgets.radio_treeview import RadioTreeview
 
 
@@ -26,6 +25,7 @@ class XeprPlusDataAnalysisWindow():
     
     def __init__(self, top_level):
         self.dsets = np.empty(0, dtype=object)
+        self.dset_treeview_items = []
 
         self.win = tk.Toplevel(top_level)
         self.win.title("Data Analysis")
@@ -95,7 +95,10 @@ class XeprPlusDataAnalysisWindow():
         self.dataset_frame = ttk.Frame(self.right_frame)
         self.dataset_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH)
         self.dataset_treeview = RadioTreeview(
-            self.dataset_frame, columns=(), show="tree")
+            self.dataset_frame,
+            columns=("name",),      # 'radio' will be added automatically
+            show="tree headings"    # show tree column (#0) + headings
+        )
         self.dataset_treeview.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
         self.dataset_scrollbar = ttk.Scrollbar(
             self.dataset_frame, orient="vertical",
@@ -449,24 +452,36 @@ class XeprPlusGui():
         self._dataanw.ax.plot(dset.x, dset.o)
         self._dataanw.canvas.draw()
         '''
-        old_selected_iid = self._dataanw.dataset_treeview.selected_iid.copy()
+        old_selected_iids = self._dataanw.dataset_treeview.selected_iids.copy()
         row = self._dataanw.dataset_treeview.on_click(event)
-        if row != -1:
-            # The click hit a radiobutton
-            if row in self._dataanw.dataset_treeview.selected_iid:
-                # The radiobutton is now clicked, add to the canvas
-                idset = self._dataanw.dataset_treeview.index(row)
-                dset = self._dataanw.dsets[idset]
-                color = self.dataanw_get_new_plot_color()
-                self._dataanw.ax.plot(dset.x, dset.o, color=color)
-                self._dataanw.canvas.draw()
-            else:
-                # The radiobutton is now unclicked, remove from canvas
-                iplot = old_selected_iid.index(row)
-                self._dataanw.ax.lines[iplot].remove()
-                self.dataanw_remove_selected_color(iplot)
-                self._dataanw.canvas.draw()
-                self._dataanw.ax.set_prop_cycle(None)
+        new_selected_iids = self._dataanw.dataset_treeview.selected_iids.copy()
+        if row == -1:
+            # The click did not hit a row of the treeview
+            return
+
+        # Radiobutton was not clicked but now it is clicked
+        add_iids = [i for i in new_selected_iids if i not in old_selected_iids]
+        for iid in add_iids:
+            # The radiobutton is now clicked, add to the canvas
+            idset = self._dataanw.dataset_treeview.index(iid)
+            dset = self._dataanw.dsets[idset]
+            color = self.dataanw_get_new_plot_color()
+            self._dataanw.ax.plot(dset.x,
+                                    dset.o,
+                                    color=color,
+                                    label=dset.params['title'])
+        
+        # Radiobutton was clicked but now is not clicked anymore
+        rmv_iids = [i for i in old_selected_iids if i not in new_selected_iids]
+        rmv_idxs = [old_selected_iids.index(i) for i in rmv_iids]
+        rmv_lines = [self._dataanw.ax.lines[i] for i in rmv_idxs]
+        for line in rmv_lines:
+            line.remove()
+        self.dataanw_remove_selected_colors(rmv_idxs)
+        
+        # Update canvas
+        self._dataanw.ax.legend()
+        self._dataanw.canvas.draw()
 
 
     def dataanw_get_new_plot_color(self):
@@ -500,15 +515,22 @@ class XeprPlusGui():
         self._dataanw.win.lift()
         self._dataanw.win.focus()
         
-        # TODO Avoid double load of files due to different extensions (DTA DSC)
-        load_files = sorted(os.listdir(load_folder))
-        # for f in load_files:
-            
+        if not load_folder:
+            return
+        dir_files = sorted(os.listdir(load_folder))
+        load_files = [f for f in dir_files if f.endswith('.DSC')]
+        if not load_files:
+            # No files found
+            self.print_log(f"No files with '.DSC' extension in {load_folder}")
+        folder_level = self._dataanw.dataset_treeview.add_radio_item(
+                "", tk.END, os.path.basename(load_folder))
+        self._dataanw.dset_treeview_items.append(folder_level)
         for f in load_files:
-            self.dataanw_load_single_dataset(os.path.join(load_folder, f))
+            self.dataanw_load_single_dataset(os.path.join(load_folder, f),
+                                             folder_level)
 
         
-    def dataanw_load_single_dataset(self, path_to_file):
+    def dataanw_load_single_dataset(self, path_to_file, folder=""):
         # Load from memory to Xepr secondary viewport
         self._logic.load_data(path_to_file, 'secondary')
         # Load from Xepr to window
@@ -520,19 +542,22 @@ class XeprPlusGui():
         ds = SimpleNamespace(x=dset.X, o=dset.O, params=params)
         self._dataanw.dsets = np.append(self._dataanw.dsets, ds)
         # Append to treeview
-        self._dataanw.dataset_treeview.add_radio_item("",
-                                                      tk.END,
-                                                      params['title'])
+        self._dataanw.dset_treeview_items.append(
+            self._dataanw.dataset_treeview.add_radio_item(folder,
+                                                          tk.END,
+                                                          params['title'])
+        )
 
 
     def dataanw_untoggle_treeview(self):
-        selected_iid = self._dataanw.dataset_treeview.selected_iid.copy()
-        for iid in selected_iid:
+        selected_iids = self._dataanw.dataset_treeview.selected_iids.copy()
+        for iid in selected_iids:
             self._dataanw.dataset_treeview.toggle_radio(iid)
 
 
-    def dataanw_remove_selected_color(self, id_remove):
-        self._dataanw.selected_colors.pop(id_remove)
+    def dataanw_remove_selected_colors(self, rmv_iids):
+        for i in sorted(rmv_iids, reverse=True):
+            self._dataanw.selected_colors.pop(i)
 
     def mw_close_xepr_api(self):
         if self._logic.xepr:
