@@ -51,14 +51,26 @@ class XeprPlusDataAnalysisWindow():
             self.left_mid_frame, text="Clear figure (hold)")
         self.clear_figure_button.grid(
             row=0, column=0, padx=5, pady=5, sticky="ew")
-        self.load_dataset_button = tk.Button(self.left_mid_frame,
+        self.new_figure_button = ttk.Button(
+            self.left_mid_frame, text="New figure")
+        self.new_figure_button.grid(
+            row=1, column=0, padx=5, pady=5, sticky="ew")
+        self.close_figure_button = ttk.Button(
+            self.left_mid_frame, text="Close figure")
+        self.close_figure_button.grid(
+            row=2, column=0, padx=5, pady=5, sticky="ew")
+        self.close_all_figures_button = ttk.Button(
+            self.left_mid_frame, text="Close all figures")
+        self.close_all_figures_button.grid(
+            row=3, column=0, padx=5, pady=5, sticky="ew")
+        self.load_dataset_button = ttk.Button(self.left_mid_frame,
                                              text="Load dataset")
         self.load_dataset_button.grid(
-            row=1, column=0, padx=5, pady=5, sticky="ew")
-        self.load_folder_button = tk.Button(self.left_mid_frame,
+            row=4, column=0, padx=5, pady=5, sticky="ew")
+        self.load_folder_button = ttk.Button(self.left_mid_frame,
                                              text="Load folder")
         self.load_folder_button.grid(
-            row=2, column=0, padx=5, pady=5, sticky="ew")
+            row=5, column=0, padx=5, pady=5, sticky="ew")
         '''
         self.plot_dataset_button = ttk.Button(
             self.left_mid_frame, text="Plot dataset")
@@ -108,36 +120,17 @@ class XeprPlusDataAnalysisWindow():
             yscrollcommand=self.dataset_scrollbar.set)
 
         # Notebook
-        self.nb = ttk.Notebook(self.right_frame)
-        self.nb.pack(expand=True, fill=tk.BOTH)
-        self.nb_tab1 = ttk.Frame(self.nb)
-        self.nb.add(self.nb_tab1, text="Fig 1")
-
-        # Plot canvas
-        self.fig = Figure(figsize=(7.5, 6), dpi=100)
-        self.ax = self.fig.add_subplot(111)
-        self.fig.tight_layout()
+        self.fig_notebook = ttk.Notebook(self.right_frame)
+        self.fig_notebook.pack(expand=True, fill=tk.BOTH)
+        self.fig_notebook_tabs = []
         self.plot_colors = rcParams['axes.prop_cycle'].by_key()['color']
         self.selected_colors = []
-        self.canvas = FigureCanvasTkAgg(self.fig, master=self.nb_tab1)
-        self.canvas_widget = self.canvas.get_tk_widget()
-        self.canvas_widget.grid(row=0, column=0, sticky="nsew")
-
-        # Navigation toolbar
-        self.toolbar = NavigationToolbar2Tk(self.canvas, self.nb_tab1, pack_toolbar=False)
-        self.toolbar.grid(row=1, column=0)
-        self.toolbar.update()
-        self.nb_tab1.grid_rowconfigure(0, weight=1)
-        self.nb_tab1.grid_rowconfigure(1, weight=0)
-        self.nb_tab1.grid_columnconfigure(0, weight=1)
+        
         
         # Configure rows and columns for general right frame
         self.right_frame.grid_rowconfigure(1, weight=1)
         self.right_frame.grid_columnconfigure(0, weight=0)
         self.right_frame.grid_columnconfigure(1, weight=1)
-        
-        # Draw
-        self.canvas.draw()
         
         
 class XeprPlusMainWindow():
@@ -341,28 +334,34 @@ class XeprPlusGui():
         
         self._mw = XeprPlusMainWindow()
         self.print_log("Start XeprPlus.")
-        self._newexpw = XeprPlusNewExpWindow(self._mw.win)
-        self._runmeasw = XeprPlusRunMeasWindow(self._mw.win)
-        self._dataanw = XeprPlusDataAnalysisWindow(self._mw.win)
+        # New experiment window (nexw)
+        self._nexw = XeprPlusNewExpWindow(self._mw.win)
+        # Run measurement window (rmw)
+        self._rmw = XeprPlusRunMeasWindow(self._mw.win)
+        # Data analysis window (daw)
+        self._daw = XeprPlusDataAnalysisWindow(self._mw.win)
 
         self.executor = ThreadPoolExecutor(max_workers=1)  # Create once
         self.meas_fut = None  # Initialize as None
         
         # TODO remove this when features are implemented
-        self._runmeasw.run_goal_snr_radiobutton.config(state="disabled")
+        self._rmw.run_goal_snr_radiobutton.config(state="disabled")
         
         # Do not open as soon as called
-        self._newexpw.win.withdraw()
-        self._runmeasw.win.withdraw()
-        self._dataanw.win.withdraw()
+        self._nexw.win.withdraw()
+        self._rmw.win.withdraw()
+        self._daw.win.withdraw()
         # Change default behavior of clicking "X" button
         self._mw.win.protocol("WM_DELETE_WINDOW", self._on_closing)
-        self._newexpw.win.protocol("WM_DELETE_WINDOW",
-                                   self._newexpw.win.withdraw)
-        self._runmeasw.win.protocol("WM_DELETE_WINDOW",
-                                    self._runmeasw.win.withdraw)        
-        self._dataanw.win.protocol("WM_DELETE_WINDOW",
-                                   self._dataanw.win.withdraw)
+        self._nexw.win.protocol("WM_DELETE_WINDOW",
+                                   self._nexw.win.withdraw)
+        self._rmw.win.protocol("WM_DELETE_WINDOW",
+                                    self._rmw.win.withdraw)        
+        self._daw.win.protocol("WM_DELETE_WINDOW",
+                                   self._daw.win.withdraw)
+
+        # Create first canvas for data analysis window
+        self.daw_new_figure_button_clicked()
 
         # Connect widgets to functions
         # Menubar
@@ -376,85 +375,112 @@ class XeprPlusGui():
         self._mw.data_analysis_button.config(
             command=self.mw_data_analysis_button_clicked)
         
-        self._newexpw.cancel_button.config(
-            command=self.newexpw_cancel_button_clicked)
-        self._newexpw.create_button.config(
-            command=self.newexpw_create_button_clicked)
+        self._nexw.cancel_button.config(
+            command=self.nexw_cancel_button_clicked)
+        self._nexw.create_button.config(
+            command=self.nexw_create_button_clicked)
         
-        self._runmeasw.save_folder_browse_button.config(
-            command=self.runmeasw_save_folder_browse_button_clicked)
-        self._runmeasw.cancel_button.config(
-            command=self.runmeasw_cancel_button_clicked)
-        self._runmeasw.run_button.config(
-            command=self.runmeasw_run_button_clicked)
+        self._rmw.save_folder_browse_button.config(
+            command=self.rmw_save_folder_browse_button_clicked)
+        self._rmw.cancel_button.config(
+            command=self.rmw_cancel_button_clicked)
+        self._rmw.run_button.config(
+            command=self.rmw_run_button_clicked)
         
         # Radiobuttons
-        self._runmeasw.run_simple_meas_radiobutton.config(
-            command=self.runmeasw_update_win)
-        self._runmeasw.run_goal_snr_radiobutton.config(
-            command=self.runmeasw_update_win)
-        self._runmeasw.run_time_duration_radiobutton.config(
-            command=self.runmeasw_update_win)
+        self._rmw.run_simple_meas_radiobutton.config(
+            command=self.rmw_update_win)
+        self._rmw.run_goal_snr_radiobutton.config(
+            command=self.rmw_update_win)
+        self._rmw.run_time_duration_radiobutton.config(
+            command=self.rmw_update_win)
 
-        # TODO connect selft._dataanw.advanced_options_button
-        self._dataanw.correct_baseline_button.config(
-            command=self.dataanw_correct_baseline)
-        self._dataanw.clear_figure_button.config(
-            command=self.dataanw_clear_figure_button_clicked)
-        self._dataanw.correct_frequency_button.config(
-            command=self.dataanw_correct_frequency)
-        self._dataanw.dataset_treeview.bind(
-            "<Button-1>", self.dataanw_dataset_treeview_clicked)
-        self._dataanw.load_dataset_button.config(
-            command=self.dataanw_load_dataset_button_clicked)
-        self._dataanw.load_folder_button.config(
-            command=self.dataanw_load_folder_button_clicked)
-        # self._dataanw.plot_dataset_button.config(
-        #     command=self.dataanw_plot_dataset)
-
+        # TODO connect self._daw.advanced_options_button
+        self._daw.clear_figure_button.config(
+            command=self.daw_clear_figure_button_clicked)
+        self._daw.close_figure_button.config(
+            command=self.daw_close_figure_button_clicked)
+        self._daw.close_all_figures_button.config(
+            command=self.daw_close_all_figures_button_clicked)
+        self._daw.correct_baseline_button.config(
+            command=self.daw_correct_baseline)
+        self._daw.correct_frequency_button.config(
+            command=self.daw_correct_frequency)
+        self._daw.load_dataset_button.config(
+            command=self.daw_load_dataset_button_clicked)
+        self._daw.load_folder_button.config(
+            command=self.daw_load_folder_button_clicked)
+        self._daw.new_figure_button.config(
+            command=self.daw_new_figure_button_clicked)
+        self._daw.dataset_treeview.bind(
+            "<Button-1>", self.daw_dataset_treeview_clicked)
+        
         # TODO add some if statement
         # Auto connect to XeprAPI at startup
         self.mw_open_xepr_api()
         
-
 
     def _on_closing(self):
         self._mw.win.destroy()
         self.mw_close_xepr_api()
         
 
-    def dataanw_clear_figure_button_clicked(self):
-        self.dataanw_untoggle_treeview()
-        self._dataanw.ax.clear()
-        self._dataanw.canvas.draw()
+    def daw_clear_figure_button_clicked(self):
+        self.daw_untoggle_treeview()
+        self._daw.ax.clear()
+        self._daw.canvas.draw()
             
 
-    def dataanw_correct_baseline(self):
+    def daw_close_figure_button_clicked(self):
+        idx = self._daw.fig_notebook.index("current")
+        self._daw.fig_notebook.forget(idx)
+
+        # Clear variables
+        self._daw.fig_notebook_tabs.pop(idx)
+        
+        # If empty, create one tab
+        if not self._daw.fig_notebook.tabs():
+            self.daw_new_figure_button_clicked()
+
+
+    def daw_close_all_figures_button_clicked(self):
+        for tab in self._daw.fig_notebook.tabs():
+            idx = self._daw.fig_notebook.index(tab)
+            self._daw.fig_notebook.forget(idx)
+
+        # Clear all previously saved variables
+        self._daw.fig_notebook_tabs = []
+        
+        # Create one tab
+        self.daw_new_figure_button_clicked()
+
+
+    def daw_correct_baseline(self):
         return
     
     
-    def dataanw_correct_frequency(self):
-        iset = self._dataanw.dataset_combobox.current()
-        dset = self._dataanw.dsets[iset]
+    def daw_correct_frequency(self):
+        iset = self._daw.dataset_combobox.current()
+        dset = self._daw.dsets[iset]
         mwf = 9.6
         x2 = dset.x * mwf / dset.params["mw_freq"] * 1e9
-        self._dataanw.ax.plot(x2, dset.o)
-        self._dataanw.canvas.draw()
+        self._daw.ax.plot(x2, dset.o)
+        self._daw.canvas.draw()
         return
     
     
-    def dataanw_dataset_treeview_clicked(self, event):
+    def daw_dataset_treeview_clicked(self, event):
         '''
-        iset = self._dataanw.dataset_combobox.current()
-        dset = self._dataanw.dsets[iset]
+        iset = self._daw.dataset_combobox.current()
+        dset = self._daw.dsets[iset]
         # Plot
-        self._dataanw.ax.clear()
-        self._dataanw.ax.plot(dset.x, dset.o)
-        self._dataanw.canvas.draw()
+        self._daw.ax.clear()
+        self._daw.ax.plot(dset.x, dset.o)
+        self._daw.canvas.draw()
         '''
-        old_selected_iids = self._dataanw.dataset_treeview.selected_iids.copy()
-        row = self._dataanw.dataset_treeview.on_click(event)
-        new_selected_iids = self._dataanw.dataset_treeview.selected_iids.copy()
+        old_selected_iids = self._daw.dataset_treeview.selected_iids.copy()
+        row = self._daw.dataset_treeview.on_click(event)
+        new_selected_iids = self._daw.dataset_treeview.selected_iids.copy()
         if row == -1:
             # The click did not hit a row of the treeview
             return
@@ -463,10 +489,10 @@ class XeprPlusGui():
         add_iids = [i for i in new_selected_iids if i not in old_selected_iids]
         for iid in add_iids:
             # The radiobutton is now clicked, add to the canvas
-            idset = self._dataanw.dataset_treeview.index(iid)
-            dset = self._dataanw.dsets[idset]
-            color = self.dataanw_get_new_plot_color()
-            self._dataanw.ax.plot(dset.x,
+            idset = self._daw.dataset_treeview.index(iid)
+            dset = self._daw.dsets[idset]
+            color = self.daw_get_new_plot_color()
+            self._daw.ax.plot(dset.x,
                                     dset.o,
                                     color=color,
                                     label=dset.params['title'])
@@ -474,46 +500,46 @@ class XeprPlusGui():
         # Radiobutton was clicked but now is not clicked anymore
         rmv_iids = [i for i in old_selected_iids if i not in new_selected_iids]
         rmv_idxs = [old_selected_iids.index(i) for i in rmv_iids]
-        rmv_lines = [self._dataanw.ax.lines[i] for i in rmv_idxs]
+        rmv_lines = [self._daw.ax.lines[i] for i in rmv_idxs]
         for line in rmv_lines:
             line.remove()
-        self.dataanw_remove_selected_colors(rmv_idxs)
+        self.daw_remove_selected_colors(rmv_idxs)
         
         # Update canvas
-        self._dataanw.ax.legend()
-        self._dataanw.canvas.draw()
+        self._daw.ax.legend()
+        self._daw.canvas.draw()
 
 
-    def dataanw_get_new_plot_color(self):
+    def daw_get_new_plot_color(self):
         i = 0
         while True:
-            if i not in self._dataanw.selected_colors:
-                self._dataanw.selected_colors.append(i)
-                return self._dataanw.plot_colors[i]
+            if i not in self._daw.selected_colors:
+                self._daw.selected_colors.append(i)
+                return self._daw.plot_colors[i]
             i += 1
 
 
-    def dataanw_load_dataset_button_clicked(self):
+    def daw_load_dataset_button_clicked(self):
         self._mw.win.focus()
         load_files = filedialog.askopenfiles(
-            parent=self._dataanw.win, title='Load files')
+            parent=self._daw.win, title='Load files')
         # TODO check extension file
-        self._dataanw.win.deiconify()
-        self._dataanw.win.lift()
-        self._dataanw.win.focus()
+        self._daw.win.deiconify()
+        self._daw.win.lift()
+        self._daw.win.focus()
         
         # TODO Avoid double load of files due to different extensions (DTA DSC)
         for f in load_files:
-            self.dataanw_load_single_dataset(f.name)
+            self.daw_load_single_dataset(f.name)
 
 
-    def dataanw_load_folder_button_clicked(self):
+    def daw_load_folder_button_clicked(self):
         self._mw.win.focus()
-        load_folder = filedialog.askdirectory(parent=self._dataanw.win, 
+        load_folder = filedialog.askdirectory(parent=self._daw.win, 
                                               title='Load folder')
-        self._dataanw.win.deiconify()
-        self._dataanw.win.lift()
-        self._dataanw.win.focus()
+        self._daw.win.deiconify()
+        self._daw.win.lift()
+        self._daw.win.focus()
         
         if not load_folder:
             return
@@ -522,15 +548,15 @@ class XeprPlusGui():
         if not load_files:
             # No files found
             self.print_log(f"No files with '.DSC' extension in {load_folder}")
-        folder_level = self._dataanw.dataset_treeview.add_radio_item(
+        folder_level = self._daw.dataset_treeview.add_radio_item(
                 "", tk.END, os.path.basename(load_folder))
-        self._dataanw.dset_treeview_items.append(folder_level)
+        self._daw.dset_treeview_items.append(folder_level)
         for f in load_files:
-            self.dataanw_load_single_dataset(os.path.join(load_folder, f),
+            self.daw_load_single_dataset(os.path.join(load_folder, f),
                                              folder_level)
 
         
-    def dataanw_load_single_dataset(self, path_to_file, folder=""):
+    def daw_load_single_dataset(self, path_to_file, folder=""):
         # Load from memory to Xepr secondary viewport
         self._logic.load_data(path_to_file, 'secondary')
         # Load from Xepr to window
@@ -540,24 +566,73 @@ class XeprPlusGui():
                   "mw_freq": dset.getSPLReal("MWFQ"),
                   "mw_": dset.getSPLReal("MWPW")}
         ds = SimpleNamespace(x=dset.X, o=dset.O, params=params)
-        self._dataanw.dsets = np.append(self._dataanw.dsets, ds)
+        self._daw.dsets = np.append(self._daw.dsets, ds)
         # Append to treeview
-        self._dataanw.dset_treeview_items.append(
-            self._dataanw.dataset_treeview.add_radio_item(folder,
+        self._daw.dset_treeview_items.append(
+            self._daw.dataset_treeview.add_radio_item(folder,
                                                           tk.END,
                                                           params['title'])
         )
 
 
-    def dataanw_untoggle_treeview(self):
-        selected_iids = self._dataanw.dataset_treeview.selected_iids.copy()
+    def daw_new_figure_button_clicked(self):
+        # Create frame inside the notebook
+        frame = ttk.Frame(self._daw.fig_notebook)
+        tab_title = self.daw_new_figure_tab_title()
+
+        # Plot canvas
+        fig = Figure(figsize=(7.5, 6), dpi=100)
+        ax = fig.add_subplot(111)
+        fig.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=frame)
+        canvas_widget = canvas.get_tk_widget()
+        canvas_widget.grid(row=0, column=0, sticky="nsew")
+
+        # Navigation toolbar
+        toolbar = NavigationToolbar2Tk(canvas, frame, pack_toolbar=False)
+        toolbar.grid(row=1, column=0)
+        toolbar.update()
+
+        # Arangement
+        frame.grid_rowconfigure(0, weight=1)
+        frame.grid_rowconfigure(1, weight=0)
+        frame.grid_columnconfigure(0, weight=1)
+
+        # Add to notebook
+        self._daw.fig_notebook.add(frame, text=tab_title)
+
+        # Draw
+        canvas.draw()
+
+        # Store
+        self._daw.fig_notebook_tabs.append(
+            SimpleNamespace(
+                frame=frame, tab_title=tab_title, fig=fig, ax=ax,
+                canvas=canvas, canvas_widget=canvas_widget, toolbar=toolbar
+                )
+        )
+        
+        return
+
+
+    def daw_new_figure_tab_title(self):
+        if not self._daw.fig_notebook_tabs:
+            return "Fig 0"
+        
+        last_title = self._daw.fig_notebook_tabs[-1].tab_title
+        return (last_title.split(" ")[0] + " " + 
+                str(int(last_title.split(" ")[1]) + 1))
+
+
+    def daw_untoggle_treeview(self):
+        selected_iids = self._daw.dataset_treeview.selected_iids.copy()
         for iid in selected_iids:
-            self._dataanw.dataset_treeview.toggle_radio(iid)
+            self._daw.dataset_treeview.toggle_radio(iid)
 
 
-    def dataanw_remove_selected_colors(self, rmv_iids):
+    def daw_remove_selected_colors(self, rmv_iids):
         for i in sorted(rmv_iids, reverse=True):
-            self._dataanw.selected_colors.pop(i)
+            self._daw.selected_colors.pop(i)
 
     def mw_close_xepr_api(self):
         if self._logic.xepr:
@@ -565,21 +640,21 @@ class XeprPlusGui():
 
 
     def mw_data_analysis_button_clicked(self):
-        if not self._dataanw.win.winfo_viewable():
-            self._dataanw.win.deiconify()
-            self._dataanw.win.lift()
-            self._dataanw.win.focus()
+        if not self._daw.win.winfo_viewable():
+            self._daw.win.deiconify()
+            self._daw.win.lift()
+            self._daw.win.focus()
         else:
-            self._dataanw.win.withdraw()
+            self._daw.win.withdraw()
 
         
     def mw_new_exp_button_clicked(self):
-        if not self._newexpw.win.winfo_viewable():
-            self._newexpw.win.deiconify()
-            self._newexpw.win.lift()
-            self._newexpw.win.focus()
+        if not self._nexw.win.winfo_viewable():
+            self._nexw.win.deiconify()
+            self._nexw.win.lift()
+            self._nexw.win.focus()
         else:
-            self._newexpw.win.withdraw()
+            self._nexw.win.withdraw()
             
 
     def mw_open_xepr_api(self):
@@ -594,30 +669,30 @@ class XeprPlusGui():
 
 
     def mw_run_meas_button_clicked(self):
-        if not self._runmeasw.win.winfo_viewable():
-            self._runmeasw.win.deiconify()
-            self._runmeasw.win.lift()
-            self._runmeasw.win.focus()
+        if not self._rmw.win.winfo_viewable():
+            self._rmw.win.deiconify()
+            self._rmw.win.lift()
+            self._rmw.win.focus()
         else:
-            self._runmeasw.win.withdraw()
+            self._rmw.win.withdraw()
 
 
-    def newexpw_cancel_button_clicked(self):
-        self._newexpw.win.withdraw()
+    def nexw_cancel_button_clicked(self):
+        self._nexw.win.withdraw()
         
         
-    def newexpw_create_button_clicked(self):
-        self._logic.create_new_experiment(self._newexpw.exp_type.get())
-        self._newexpw.win.withdraw()
+    def nexw_create_button_clicked(self):
+        self._logic.create_new_experiment(self._nexw.exp_type.get())
+        self._nexw.win.withdraw()
 
 
-    def runmeasw_cancel_button_clicked(self):
-        self._runmeasw.win.withdraw()
+    def rmw_cancel_button_clicked(self):
+        self._rmw.win.withdraw()
         
         
-    def runmeasw_run_button_clicked(self):
-        save_folder = self._runmeasw.save_folder_entry.get()
-        save_name = self._runmeasw.save_name_entry.get()
+    def rmw_run_button_clicked(self):
+        save_folder = self._rmw.save_folder_entry.get()
+        save_name = self._rmw.save_name_entry.get()
         path = os.path.join(save_folder, save_name)
         
         # Handle missing entries
@@ -625,8 +700,8 @@ class XeprPlusGui():
             self._mw.win.focus()
             tk.messagebox.showerror("Run measurement",
                                     "Please select a folder and a name.")
-            self._runmeasw.win.lift()
-            self._runmeasw.win.focus()
+            self._rmw.win.lift()
+            self._rmw.win.focus()
             return
         
         # Handle folder does not exist
@@ -634,8 +709,8 @@ class XeprPlusGui():
             self._mw.win.focus()
             tk.messagebox.showerror("Run measurement",
                                     "Please select an existing folder.")
-            self._runmeasw.win.lift()
-            self._runmeasw.win.focus()
+            self._rmw.win.lift()
+            self._rmw.win.focus()
             
         # Handle overwriting
         if os.path.isdir(path):
@@ -648,8 +723,8 @@ class XeprPlusGui():
             if res:
                 shutil.rmtree(path)
             else:
-                self._runmeasw.win.lift()
-                self._runmeasw.win.focus()
+                self._rmw.win.lift()
+                self._rmw.win.focus()
                 return
         match_files = glob.glob(path + ".*")
         if match_files:
@@ -663,33 +738,33 @@ class XeprPlusGui():
                 for f in match_files:
                     os.remove(f)
             else:
-                self._runmeasw.win.lift()
-                self._runmeasw.win.focus()
+                self._rmw.win.lift()
+                self._rmw.win.focus()
                 return
         
-        self._runmeasw.win.withdraw()
-        if self._runmeasw.run_type.get() == 0:
+        self._rmw.win.withdraw()
+        if self._rmw.run_type.get() == 0:
             args = (save_folder, save_name)
             meas_fun = self._logic.run_meas
-        elif self._runmeasw.run_type.get() == 1:
-            goal_snr = self._runmeasw.run_goal_snr_entry.get()
+        elif self._rmw.run_type.get() == 1:
+            goal_snr = self._rmw.run_goal_snr_entry.get()
             if not goal_snr.isdigit():
                 self._mw.win.focus()
                 tk.messagebox.showerror("Run measurement",
                                         "Time duration entries must be integers.")
-                self._runmeasw.win.lift()
-                self._runmeasw.win.focus()
+                self._rmw.win.lift()
+                self._rmw.win.focus()
             args = (save_folder, save_name, int(goal_snr))
             meas_fun = self._logic.run_meas_goal_snr
-        elif self._runmeasw.run_type.get() == 2:
-            time_duration_h = self._runmeasw.run_time_duration_h_entry.get()
-            time_duration_m = self._runmeasw.run_time_duration_m_entry.get()
+        elif self._rmw.run_type.get() == 2:
+            time_duration_h = self._rmw.run_time_duration_h_entry.get()
+            time_duration_m = self._rmw.run_time_duration_m_entry.get()
             if not time_duration_h.isdigit() or not time_duration_m.isdigit():
                 self._mw.win.focus()
                 tk.messagebox.showerror("Run measurement",
                                         "Time duration entries must be integers.")
-                self._runmeasw.win.lift()
-                self._runmeasw.win.focus()
+                self._rmw.win.lift()
+                self._rmw.win.focus()
             time_duration_h = int(time_duration_h)
             time_duration_m = int(time_duration_m)
             args = (save_folder, save_name, time_duration_h, time_duration_m)
@@ -710,29 +785,29 @@ class XeprPlusGui():
         self._update_gui()
         '''
 
-    def runmeasw_save_folder_browse_button_clicked(self):
+    def rmw_save_folder_browse_button_clicked(self):
         self._mw.win.focus()
         save_folder = filedialog.askdirectory(
-            parent=self._runmeasw.win, title="Select folder")
-        self._runmeasw.save_folder_entry.delete(0, tk.END)
-        self._runmeasw.save_folder_entry.insert(0, save_folder)
-        self._runmeasw.win.lift()
-        self._runmeasw.win.focus()
+            parent=self._rmw.win, title="Select folder")
+        self._rmw.save_folder_entry.delete(0, tk.END)
+        self._rmw.save_folder_entry.insert(0, save_folder)
+        self._rmw.win.lift()
+        self._rmw.win.focus()
 
 
-    def runmeasw_update_win(self):
-        if self._runmeasw.run_type.get() == 0:
-            self._runmeasw.run_goal_snr_entry.config(state="disabled")
-            self._runmeasw.run_time_duration_h_entry.config(state="disabled")
-            self._runmeasw.run_time_duration_m_entry.config(state="disabled")
-        elif self._runmeasw.run_type.get() == 1:
-            self._runmeasw.run_goal_snr_entry.config(state="active")
-            self._runmeasw.run_time_duration_h_entry.config(state="disabled")
-            self._runmeasw.run_time_duration_m_entry.config(state="disabled")
-        elif self._runmeasw.run_type.get() == 2:
-            self._runmeasw.run_goal_snr_entry.config(state="disabled")
-            self._runmeasw.run_time_duration_h_entry.config(state="active")
-            self._runmeasw.run_time_duration_m_entry.config(state="active")
+    def rmw_update_win(self):
+        if self._rmw.run_type.get() == 0:
+            self._rmw.run_goal_snr_entry.config(state="disabled")
+            self._rmw.run_time_duration_h_entry.config(state="disabled")
+            self._rmw.run_time_duration_m_entry.config(state="disabled")
+        elif self._rmw.run_type.get() == 1:
+            self._rmw.run_goal_snr_entry.config(state="active")
+            self._rmw.run_time_duration_h_entry.config(state="disabled")
+            self._rmw.run_time_duration_m_entry.config(state="disabled")
+        elif self._rmw.run_type.get() == 2:
+            self._rmw.run_goal_snr_entry.config(state="disabled")
+            self._rmw.run_time_duration_h_entry.config(state="active")
+            self._rmw.run_time_duration_m_entry.config(state="active")
 
 
     def _update_gui(self):
@@ -744,12 +819,12 @@ class XeprPlusGui():
             self._mw.run_meas_button.config(state="disabled") #
         if self.meas_fut:
             if self.meas_fut.running():
-                exp_name = self._runmeasw.save_name_entry.get()
+                exp_name = self._rmw.save_name_entry.get()
                 self.print_log("Started experiment '" + exp_name + "'.")
                 self._mw.new_exp_button.config(state="disabled") #
                 self._mw.run_meas_button.config(state="disabled") #  
             elif self.meas_fut.done():
-                exp_name = self._runmeasw.save_name_entry.get()
+                exp_name = self._rmw.save_name_entry.get()
                 self.print_log("Finished experiment '" + exp_name + "'.")
                 self.meas_fut = None
                 self._mw.new_exp_button.config(state="active")
@@ -758,7 +833,7 @@ class XeprPlusGui():
         '''
         if self.meas_thread and self.meas_thread.is_alive():
             # Disable buttons while running
-            self._mw.new_exp_button.config(state="disabled")
+            self._mw.nexw_exp_button.config(state="disabled")
             self._mw.run_meas_button.config(state="disabled")
             self.print_log("Measurement running...")
             
@@ -766,13 +841,13 @@ class XeprPlusGui():
             
         else:
             # Re-enable buttons when done
-            self._mw.new_exp_button.config(state="active")
+            self._mw.nexw_exp_button.config(state="active")
             self._mw.run_meas_button.config(state="active")
             self.print_log("Measurement completed.")
-        '''
+        
         
         # self._mw.win.after(1000, self._update_gui)
-        
+        '''
             
     def print_log(self, msg):
         now = datetime.strftime(datetime.now(), '%Y-%m-%d, %H:%M:%S >> ')
