@@ -35,8 +35,95 @@ class XeprPlusLogic():
             time.sleep(waiting_time)
             
     
+    def adjust_lock_offset(self):
+        return
+    
+
+    def baseline_region(self, x, bl_type="width", region=0.15):
+        if type == "width":
+            left = np.min(x) + (np.max(x) - np.min(x)) * region
+            right = np.max(x) - (np.max(x) - np.min(x)) * region
+            return (x < left) | (x > right)
+        elif type == "range":
+            bl = [False for _ in range(len(x))]
+            for reg in region:
+                new_bl = (x > reg[0]) & (x < reg[0])
+                bl = bl | new_bl
+            return bl
+        
+
+    def calculate_snr(self, y, noise_idx, mode="std"):
+        if y.ndim == 1:
+            sig_lev = np.max(y) - np.min(y)
+            if mode == "std":
+                noise_lev = np.std(y[noise_idx])
+            elif mode == "pkpk":
+                noise_lev = np.max(y[noise_idx]) - np.min(y[noise_idx])
+            else:
+                raise Exception("mode must be 'std' or 'pkpk'")
+            snr = sig_lev / noise_lev
+
+            return snr, sig_lev, noise_lev
+        elif y.ndim == 2:
+            # First identify the time slice
+            t_argmaxs = np.argmax(np.abs(y), axis=1)
+            t_argmax = np.max(np.bincount(t_argmaxs))
+            return self.calculate_snr(y[:, t_argmax], noise_idx, mode)
+
+
     def close_xepr_api(self):
         print('Close xepr api.')
+
+
+    def correct_baseline(self, data, dim=0, n=0, region=0):
+        if data.ndim > 2:
+            raise ValueError(
+                f"Only 1D or 2D data supported, got ndim={data.ndim}.")
+
+        if dim not in (0, 1):
+            raise ValueError("dim must be 0, 1. Only 1D or 2D data supported.")
+        
+        # One dim fit
+        if isinstance(n, (list, tuple, np.ndarray)):
+            if len(n) != 1:
+                raise ValueError("For 1D fit, polynomial order n must be a scalar")
+            n = n[0]
+
+        if n >= data.shape[dim]:
+            raise ValueError(
+                f"Polynomial order n={n} must be smaller than"
+                "data size {data.shape[dim]}"
+            )
+
+        if data.ndim == 1:
+            data = np.reshape(data, [data.size, 1])
+
+        x = np.linspace(-1, 1, data.shape[dim])
+        poly_exponents = np.arange(n + 1)
+        # Vandermonde matrix shape (len(x), n+1)
+        D = x[:, None] ** poly_exponents[None, :]
+
+        if dim == 1:
+            # The dimension along which the data is corrected must be dim 0
+            data = data.T
+
+        if region is not None:
+            if region.size != data.shape[0]:
+                raise ValueError("Region length must match data dimension")
+            p = np.linalg.lstsq(D[region], data[region, :], rcond=None)[0]
+        else:
+            p, _, _, _ = np.linalg.lstsq(D, data, rcond=None)
+        
+        baseline = D.dot(p)
+
+        if dim == 1:
+            # Transpose back if necessary
+            baseline = baseline.T
+            data = data.T
+
+        datacorr = data - baseline
+
+        return datacorr, baseline
 
 
     def create_new_experiment(self, exp_type):
@@ -73,26 +160,33 @@ class XeprPlusLogic():
         return 0
 
         
-    def run_measurement(self, folder, filename):
+    def run_meas(self, folder, meas_name):
         print("run simple measurement")
         print("folder:", folder)
-        print("filename", filename)
+        print("meas_name:", meas_name)
         return 0
     
-    def run_measurement_goal_snr(self, folder, filename, goal_snr):
+
+    def run_meas_goal_snr(self, folder, exp_name, goal_snr):
         print("run measurement with goal snr")
         print("folder:", folder)
-        print("filename", filename)
+        print("exp_name", exp_name)
         print("goal_snr", goal_snr)
         return 0
 
-    def run_measurement_for_time(self, folder, filename, for_time):
+
+    def run_measurement_for_time(self, folder, exp_name, hours, minutes):
         print("run measurement for time")
         print("folder:", folder)
-        print("filename", filename)
-        print("for_time:", for_time, "hours")
+        print("exp_name", exp_name)
+        print("hours:", hours)
+        print("minutes:", minutes)
         return 0
     
+
+    def save_meas(self, folder, meas_name):
+        print("save_meas")
+
 
 class DatasetXepr():
 
@@ -101,7 +195,7 @@ class DatasetXepr():
         self.X = np.linspace(320, 350, N)
         self.O = pes.gaussian(self.X,
                               self.X.mean() + random.uniform(-5, 5),
-                              8,
+                              2,
                               0)
 
     def getSPLReal(self, par):
@@ -112,3 +206,5 @@ class DatasetXepr():
         
     def getTitle(self):
         return "Test set " + str(random.randint(10, 99))
+    
+    

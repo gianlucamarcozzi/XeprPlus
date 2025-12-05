@@ -345,9 +345,6 @@ class XeprPlusGui():
         self.executor = ThreadPoolExecutor(max_workers=1)  # Create once
         self.meas_fut = None  # Initialize as None
         
-        # TODO remove this when features are implemented
-        self._rmw.run_goal_snr_radiobutton.config(state="disabled")
-        
         # Do not open as soon as called
         self._nexw.win.withdraw()
         self._rmw.win.withdraw()
@@ -404,7 +401,7 @@ class XeprPlusGui():
         self._daw.close_all_figures_button.config(
             command=self.daw_close_all_figures_button_clicked)
         self._daw.correct_baseline_button.config(
-            command=self.daw_correct_baseline)
+            command=self.daw_correct_baseline_button_clicked)
         self._daw.correct_frequency_button.config(
             command=self.daw_correct_frequency)
         self._daw.load_dataset_button.config(
@@ -520,7 +517,31 @@ class XeprPlusGui():
         self._daw_update_current_fig_notebook_tab()
 
 
-    def daw_correct_baseline(self):
+    def daw_correct_baseline_button_clicked(self):
+        iid = self._daw.dataset_treeview.focus()
+        idset = self._daw.dataset_treeview.index(iid)
+        dset = self._daw.dsets[idset]
+
+        if dset.o.ndim == 1:
+            left = np.min(dset.x) + (np.max(dset.x) - np.min(dset.x)) * 0.15
+            right = np.max(dset.x) - (np.max(dset.x) - np.min(dset.x)) * 0.15
+            region = (dset.x < left) | (dset.x > right)
+            dset.ycorr, dset.bl = self._logic.correct_baseline(
+                dset.o, dim=0, n=1, region=region)
+            
+            color = self.daw_get_new_plot_color()
+            self._daw.cur_tab.ax.plot(dset.x,
+                                      dset.ycorr,
+                                      color=color,                            label=dset.params['title'] + " corr")
+            color = self.daw_get_new_plot_color()
+            self._daw.cur_tab.ax.plot(dset.x,
+                                      dset.bl,
+                                      color=color,                            label=dset.params['title'] + "bl")
+
+            # Update canvas
+            self._daw.cur_tab.ax.legend()
+            self._daw.cur_tab.canvas.draw()
+        
         return
     
     
@@ -537,14 +558,6 @@ class XeprPlusGui():
     
     
     def daw_dataset_treeview_clicked(self, event):
-        '''
-        iset = self._daw.dataset_combobox.current()
-        dset = self._daw.dsets[iset]
-        # Plot
-        self._daw.ax.clear()
-        self._daw.ax.plot(dset.x, dset.o)
-        self._daw.canvas.draw()
-        '''
         old_selected_iids = self._daw.dataset_treeview.selected_iids.copy()
         row = self._daw.dataset_treeview.on_click(event)
         new_selected_iids = self._daw.dataset_treeview.selected_iids.copy()
@@ -588,16 +601,20 @@ class XeprPlusGui():
     def daw_load_dataset_button_clicked(self):
         self._mw.win.focus()
         load_files = filedialog.askopenfiles(
-            parent=self._daw.win, title='Load files')
+            parent=self._daw.win, title='Load files',
+            filetypes =[('Description files', '*.DSC')])
         # TODO check extension file
         self._daw.win.deiconify()
         self._daw.win.lift()
         self._daw.win.focus()
         
-        # TODO Avoid double load of files due to different extensions (DTA DSC)
         for f in load_files:
-            self.daw_load_single_dataset(f.name)
-
+            if f.endswith('.DSC') or f.endswith('.DTA') or f.endswith('.YGA'):
+                self.daw_load_single_dataset(f.name)
+                self._print_log("Load dataset ")
+            else:
+                self._print_log(f"Could not load {f}.\nFile extension " + 
+                                "must be '.DTA', '.DSC' or '.YGA'")
 
     def daw_load_folder_button_clicked(self):
         self._mw.win.focus()
@@ -854,6 +871,7 @@ class XeprPlusGui():
         
         self._update_gui()
         '''
+
 
     def rmw_save_folder_browse_button_clicked(self):
         self._mw.win.focus()

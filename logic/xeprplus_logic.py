@@ -70,10 +70,92 @@ class XeprPlusLogic():
                 
         return 0
     
-    
+
+    def baseline_region(self, x, bl_type="width", region=0.15):
+        if type == "width":
+            left = np.min(x) + (np.max(x) - np.min(x)) * region
+            right = np.max(x) - (np.max(x) - np.min(x)) * region
+            return (x < left) | (x > right)
+        elif type == "range":
+            bl = [False for _ in range(len(x))]
+            for reg in region:
+                new_bl = (x > reg[0]) & (x < reg[0])
+                bl = bl | new_bl
+            return bl
+
+
+    def calculate_snr(self, y, noise_idx, mode="std"):
+        if y.ndim == 1:
+            sig_lev = np.max(y) - np.min(y)
+            if mode == "std":
+                noise_lev = np.std(y[noise_idx])
+            elif mode == "pkpk":
+                noise_lev = np.max(y[noise_idx]) - np.min(y[noise_idx])
+            else:
+                raise Exception("mode must be 'std' or 'pkpk'")
+            snr = sig_lev / noise_lev
+
+            return snr, sig_lev, noise_lev
+        elif y.ndim == 2:
+            # First identify the time slice
+            t_argmaxs = np.argmax(np.abs(y), axis=1)
+            t_argmax = np.max(np.bincount(t_argmaxs))
+            return self.calculate_snr(y[:, t_argmax], noise_idx, mode)
+
+
     def close_xepr_api(self):
         self.xepr.XeprClose()
 
+
+    def correct_baseline(self, data, dim=0, n=0, region=0):
+        if data.ndim > 2:
+            raise ValueError(f"Only 1D or 2D data supported, got ndim={data.ndim}.")
+
+        if dim not in (0, 1):
+            raise ValueError("dim must be 0, 1. Only 1D or 2D data supported.")
+        
+        # One dim fit
+        if isinstance(n, (list, tuple, np.ndarray)):
+            if len(n) != 1:
+                raise ValueError("For 1D fit, polynomial order n must be a scalar")
+            n = n[0]
+
+        if n >= data.shape[dim]:
+            raise ValueError(
+                f"Polynomial order n={n} must be smaller than"
+                "data size {data.shape[dim]}"
+            )
+        
+        if data.ndim == 1:
+            data = np.reshape(data, [data.size, 1])
+
+        x = np.linspace(-1, 1, data.shape[dim])
+        poly_exponents = np.arange(n + 1)
+        # Vandermonde matrix shape (len(x), n+1)
+        D = x[:, None] ** poly_exponents[None, :]
+
+        if dim == 1:
+            # The dimension along which the data is corrected must be dim 0
+            data = data.T
+
+        if region is not None:
+            if region.size != data.shape[0]:
+                raise ValueError("Region length must match data dimension")
+            p = np.linalg.lstsq(D[region], data[region, :], rcond=None)[0]
+        else:
+            p, _, _, _ = np.linalg.lstsq(D, data, rcond=None)
+        
+        baseline = D.dot(p)
+
+        if dim == 1:
+            # Transpose back if necessary
+            baseline = baseline.T
+            data = data.T
+
+        datacorr = data - baseline
+
+        return datacorr, baseline
+    
 
     def create_new_experiment(self, exp_type):
         if exp_type == 0:
@@ -94,6 +176,10 @@ class XeprPlusLogic():
         exp = self.xepr.XeprExperiment(self.exp_names[-1])
         self.exps.append(exp)
         
+
+    def get_dataset(self, xeprset='primary'):
+        return self.xepr.XeprDataset(xeprset=xeprset)
+    
         
     def load_data(self, path, viewport):
         # Viewport should be 'primary' or 'secondary'
@@ -138,10 +224,23 @@ class XeprPlusLogic():
             meas_name = exp_name + f"-{i_meas:05d}"
             self.save_meas(save_folder, meas_name)
             
-            #
-            # TODO calculate SNR
-            # 
-        
+            dset = self.get_dataset(xeprset="primary")
+            # Correct along time
+            # Assuming flash after 30 ns
+            bl_region_t = self.baseline_region(dset.x, "range", 30)
+            y_mid, bl_mid = self.correct_baseline(
+                dset.o, dim=0, region=bl_region_t)
+            # Correct along field
+            bl_region_bfield = self.baseline_region(dset.x, "width", 0.15)
+            y_fin, bl_fin = self.correct_baseline(
+                y_mid, dim=1, region=bl_region_bfield)
+            
+            # SNR of the last measurement
+            snr, _, _ = self.calculate_snr(y_fin, bl_region_bfield)
+
+            # Update SNR of the whole experiment
+            cur_snr = (cur_snr * (i_meas ** 2 - 1) + snr) / np.sqrt(i_meas)
+
         return 0
 
 
@@ -180,3 +279,5 @@ class XeprPlusLogic():
         self.xepr.XeprCmds.vpSave("Current", "Primary", meas_name, save_path)
         # Exp to primary window
         self.xepr.XeprCmds.aqExpSelect(1, cur_exp.aqGetExpName())
+
+        
