@@ -26,6 +26,9 @@ class XeprPlusDataAnalysisWindow():
     def __init__(self, top_level):
         self.dsets = np.empty(0, dtype=object)
         self.dset_treeview_items = []
+        self.fig_notebook_tabs = []
+        self.cur_tab = None
+        self.selected_colors = []
 
         self.win = tk.Toplevel(top_level)
         self.win.title("Data Analysis")
@@ -122,9 +125,7 @@ class XeprPlusDataAnalysisWindow():
         # Notebook
         self.fig_notebook = ttk.Notebook(self.right_frame)
         self.fig_notebook.pack(expand=True, fill=tk.BOTH)
-        self.fig_notebook_tabs = []
         self.plot_colors = rcParams['axes.prop_cycle'].by_key()['color']
-        self.selected_colors = []
         
         
         # Configure rows and columns for general right frame
@@ -333,7 +334,7 @@ class XeprPlusGui():
         self._logic = logic
         
         self._mw = XeprPlusMainWindow()
-        self.print_log("Start XeprPlus.")
+        self._print_log("Start XeprPlus.")
         # New experiment window (nexw)
         self._nexw = XeprPlusNewExpWindow(self._mw.win)
         # Run measurement window (rmw)
@@ -412,41 +413,102 @@ class XeprPlusGui():
             command=self.daw_load_folder_button_clicked)
         self._daw.new_figure_button.config(
             command=self.daw_new_figure_button_clicked)
-        self._daw.dataset_treeview.bind(
-            "<Button-1>", self.daw_dataset_treeview_clicked)
-        
+        self._daw.dataset_treeview.bind("<Button-1>",
+                                        self.daw_dataset_treeview_clicked)
+        self._daw.fig_notebook.bind("<<NotebookTabChanged>>",
+                                    self.daw_fig_notebook_tab_changed)
+
         # TODO add some if statement
         # Auto connect to XeprAPI at startup
         self.mw_open_xepr_api()
         
+
+    def _daw_update_current_fig_notebook_tab(self):
+        itab = self._daw.fig_notebook.index("current")
+        self._daw.cur_tab = self._daw.fig_notebook_tabs[itab]
+
 
     def _on_closing(self):
         self._mw.win.destroy()
         self.mw_close_xepr_api()
         
 
+    def _print_log(self, msg):
+        now = datetime.strftime(datetime.now(), '%Y-%m-%d, %H:%M:%S >> ')
+        self._mw.logs_area.insert(tk.END, now + msg + '\n')
+        self._mw.logs_area.see(tk.END)
+    
+    
+    def _update_gui(self):
+        if self._logic.xepr and self._logic.xepr.XeprActive():
+            self._mw.new_exp_button.config(state="active")
+            self._mw.run_meas_button.config(state="active")   
+        else:
+            self._mw.new_exp_button.config(state="disabled") #
+            self._mw.run_meas_button.config(state="disabled") #
+        if self.meas_fut:
+            if self.meas_fut.running():
+                exp_name = self._rmw.save_name_entry.get()
+                self._print_log("Started experiment '" + exp_name + "'.")
+                self._mw.new_exp_button.config(state="disabled") #
+                self._mw.run_meas_button.config(state="disabled") #  
+            elif self.meas_fut.done():
+                exp_name = self._rmw.save_name_entry.get()
+                self._print_log("Finished experiment '" + exp_name + "'.")
+                self.meas_fut = None
+                self._mw.new_exp_button.config(state="active")
+                self._mw.run_meas_button.config(state="active")   
+                
+        '''
+        if self.meas_thread and self.meas_thread.is_alive():
+            # Disable buttons while running
+            self._mw.nexw_exp_button.config(state="disabled")
+            self._mw.run_meas_button.config(state="disabled")
+            self._print_log("Measurement running...")
+            
+            # Schedule next check in 1000ms
+            
+        else:
+            # Re-enable buttons when done
+            self._mw.nexw_exp_button.config(state="active")
+            self._mw.run_meas_button.config(state="active")
+            self._print_log("Measurement completed.")
+        
+        
+        # self._mw.win.after(1000, self._update_gui)
+        '''
+    
+    
+    def daw_fig_notebook_tab_changed(self, event):
+        # Update current tab
+        self._daw_update_current_fig_notebook_tab()
+
+
     def daw_clear_figure_button_clicked(self):
         self.daw_untoggle_treeview()
-        self._daw.ax.clear()
-        self._daw.canvas.draw()
+        self._daw.cur_tab.ax.clear()
+        self._daw.cur_tab.canvas.draw()
             
 
     def daw_close_figure_button_clicked(self):
-        idx = self._daw.fig_notebook.index("current")
-        self._daw.fig_notebook.forget(idx)
+        itab = self._daw.fig_notebook.index("current")
+        self._daw.fig_notebook.forget(itab)
 
         # Clear variables
-        self._daw.fig_notebook_tabs.pop(idx)
+        self._daw.fig_notebook_tabs.pop(itab)
         
         # If empty, create one tab
         if not self._daw.fig_notebook.tabs():
             self.daw_new_figure_button_clicked()
 
+        # Update current tab
+        self._daw_update_current_fig_notebook_tab()
+
 
     def daw_close_all_figures_button_clicked(self):
         for tab in self._daw.fig_notebook.tabs():
-            idx = self._daw.fig_notebook.index(tab)
-            self._daw.fig_notebook.forget(idx)
+            itab = self._daw.fig_notebook.index(tab)
+            self._daw.fig_notebook.forget(itab)
 
         # Clear all previously saved variables
         self._daw.fig_notebook_tabs = []
@@ -454,18 +516,23 @@ class XeprPlusGui():
         # Create one tab
         self.daw_new_figure_button_clicked()
 
+        # Update current tab
+        self._daw_update_current_fig_notebook_tab()
+
 
     def daw_correct_baseline(self):
         return
     
     
     def daw_correct_frequency(self):
+        '''
         iset = self._daw.dataset_combobox.current()
         dset = self._daw.dsets[iset]
         mwf = 9.6
         x2 = dset.x * mwf / dset.params["mw_freq"] * 1e9
         self._daw.ax.plot(x2, dset.o)
         self._daw.canvas.draw()
+        '''
         return
     
     
@@ -492,22 +559,21 @@ class XeprPlusGui():
             idset = self._daw.dataset_treeview.index(iid)
             dset = self._daw.dsets[idset]
             color = self.daw_get_new_plot_color()
-            self._daw.ax.plot(dset.x,
-                                    dset.o,
-                                    color=color,
-                                    label=dset.params['title'])
+            self._daw.cur_tab.ax.plot(dset.x,
+                                      dset.o,
+                                      color=color,                            label=dset.params['title'])
         
         # Radiobutton was clicked but now is not clicked anymore
         rmv_iids = [i for i in old_selected_iids if i not in new_selected_iids]
         rmv_idxs = [old_selected_iids.index(i) for i in rmv_iids]
-        rmv_lines = [self._daw.ax.lines[i] for i in rmv_idxs]
+        rmv_lines = [self._daw.cur_tab.ax.lines[i] for i in rmv_idxs]
         for line in rmv_lines:
             line.remove()
         self.daw_remove_selected_colors(rmv_idxs)
         
         # Update canvas
-        self._daw.ax.legend()
-        self._daw.canvas.draw()
+        self._daw.cur_tab.ax.legend()
+        self._daw.cur_tab.canvas.draw()
 
 
     def daw_get_new_plot_color(self):
@@ -547,7 +613,7 @@ class XeprPlusGui():
         load_files = [f for f in dir_files if f.endswith('.DSC')]
         if not load_files:
             # No files found
-            self.print_log(f"No files with '.DSC' extension in {load_folder}")
+            self._print_log(f"No files with '.DSC' extension in {load_folder}")
         folder_level = self._daw.dataset_treeview.add_radio_item(
                 "", tk.END, os.path.basename(load_folder))
         self._daw.dset_treeview_items.append(folder_level)
@@ -612,6 +678,9 @@ class XeprPlusGui():
                 )
         )
         
+        # Update current tab
+        self._daw_update_current_fig_notebook_tab()
+
         return
 
 
@@ -633,6 +702,7 @@ class XeprPlusGui():
     def daw_remove_selected_colors(self, rmv_iids):
         for i in sorted(rmv_iids, reverse=True):
             self._daw.selected_colors.pop(i)
+
 
     def mw_close_xepr_api(self):
         if self._logic.xepr:
@@ -660,11 +730,11 @@ class XeprPlusGui():
     def mw_open_xepr_api(self):
         status = self._logic.open_xepr_api()
         if status == 0:
-            self.print_log("Connected to XeprAPI.")
+            self._print_log("Connected to XeprAPI.")
         elif status == -1:
-            self.print_log("Could not connect to XeprAPI. In Xepr, click " + 
-                           "'Processing>XeprAPI>Enable XeprAPI'. " + 
-                           "In XeprPlus, click 'Options>Open XeprAPI.'")
+            self._print_log("Could not connect to XeprAPI. In Xepr, click " + 
+                            "'Processing>XeprAPI>Enable XeprAPI'. " + 
+                            "In XeprPlus, click 'Options>Open XeprAPI.'")
         self._update_gui()
 
 
@@ -810,47 +880,5 @@ class XeprPlusGui():
             self._rmw.run_time_duration_m_entry.config(state="active")
 
 
-    def _update_gui(self):
-        if self._logic.xepr and self._logic.xepr.XeprActive():
-            self._mw.new_exp_button.config(state="active")
-            self._mw.run_meas_button.config(state="active")   
-        else:
-            self._mw.new_exp_button.config(state="disabled") #
-            self._mw.run_meas_button.config(state="disabled") #
-        if self.meas_fut:
-            if self.meas_fut.running():
-                exp_name = self._rmw.save_name_entry.get()
-                self.print_log("Started experiment '" + exp_name + "'.")
-                self._mw.new_exp_button.config(state="disabled") #
-                self._mw.run_meas_button.config(state="disabled") #  
-            elif self.meas_fut.done():
-                exp_name = self._rmw.save_name_entry.get()
-                self.print_log("Finished experiment '" + exp_name + "'.")
-                self.meas_fut = None
-                self._mw.new_exp_button.config(state="active")
-                self._mw.run_meas_button.config(state="active")   
-                
-        '''
-        if self.meas_thread and self.meas_thread.is_alive():
-            # Disable buttons while running
-            self._mw.nexw_exp_button.config(state="disabled")
-            self._mw.run_meas_button.config(state="disabled")
-            self.print_log("Measurement running...")
-            
-            # Schedule next check in 1000ms
-            
-        else:
-            # Re-enable buttons when done
-            self._mw.nexw_exp_button.config(state="active")
-            self._mw.run_meas_button.config(state="active")
-            self.print_log("Measurement completed.")
-        
-        
-        # self._mw.win.after(1000, self._update_gui)
-        '''
-            
-    def print_log(self, msg):
-        now = datetime.strftime(datetime.now(), '%Y-%m-%d, %H:%M:%S >> ')
-        self._mw.logs_area.insert(tk.END, now + msg + '\n')
-        self._mw.logs_area.see(tk.END)
+
 
