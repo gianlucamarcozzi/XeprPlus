@@ -5,7 +5,9 @@ import os
 import sys
 import time
 
-sys.path.insert(0, os.popen("Xepr --apipath").read())
+# sys.path.insert(0, os.popen("Xepr --apipath").read())
+sys.path.insert(0, "/usr/local/lib/python3.9/dist-packages")
+
 import XeprAPI
 
 class XeprPlusLogic():
@@ -72,11 +74,11 @@ class XeprPlusLogic():
     
 
     def baseline_region(self, x, bl_type="width", region=0.15):
-        if type == "width":
+        if bl_type == "width":
             left = np.min(x) + (np.max(x) - np.min(x)) * region
             right = np.max(x) - (np.max(x) - np.min(x)) * region
             return (x < left) | (x > right)
-        elif type == "range":
+        elif bl_type == "range":
             bl = [False for _ in range(len(x))]
             for reg in region:
                 new_bl = (x > reg[0]) & (x < reg[0])
@@ -126,7 +128,8 @@ class XeprPlusLogic():
                 "data size {data.shape[dim]}"
             )
         
-        if data.ndim == 1:
+        orig_ndim = data.ndim
+        if orig_ndim == 1:
             data = np.reshape(data, [data.size, 1])
 
         x = np.linspace(-1, 1, data.shape[dim])
@@ -152,8 +155,13 @@ class XeprPlusLogic():
             baseline = baseline.T
             data = data.T
 
+        if orig_ndim == 1:
+            data = np.squeeze(data)
+            baseline = np.squeeze(baseline)
+            
         datacorr = data - baseline
-
+        
+            
         return datacorr, baseline
     
 
@@ -197,8 +205,8 @@ class XeprPlusLogic():
 
 
     def run_meas(self, folder, meas_name):
-        cur_exp = self.xepr.XeprExperiment()
-        self._command_wait(cur_exp.aqExpRunAndWait, waiting_time=5)
+        exp = self.xepr.XeprExperiment()
+        self._command_wait(exp.aqExpRunAndWait, waiting_time=5)
         self.save_meas(folder, meas_name)
         return 0
     
@@ -208,38 +216,58 @@ class XeprPlusLogic():
         save_folder = os.path.join(folder, exp_name)
         os.mkdir(save_folder)
         
-        # Run
-        i_meas = 0
-        cur_snr = 0
-        cur_exp = self.xepr.XeprExperiment()
-        while cur_snr < goal_snr:
-            # Adjust lock offset
-            status = self.adjust_lock_offset()
-            # if status == -1:
-                # logging.info('Exceeded max time for adjustLockOffset')
+        # Get current experiment
+        exp = self.xepr.XeprExperiment()
+        
+        # Run first scan
+        self._command_wait(exp.aqExpRunAndWait, waiting_time=5)
+        meas_name = exp_name + f"-{1:05d}"
+        self.save_meas(save_folder, meas_name)
+        
+        # SNR per scan
+        # Calculate SNR after baseline correction
+        dset = self.get_dataset(xeprset="primary")
+        ord0 = np.array(dset.O)
+        x = np.array(dset.X)
+        
+        if ord0.ndim == 1:
+            # Correct along field
+            bl_region_bfield = self.baseline_region(x, "width", 0.15)
+            
+            y_fin, bl_fin = self.correct_baseline(
+                ord0, region=bl_region_bfield)
+        else:
                 
-            i_meas += 1
-            self._command_wait(cur_exp.aqExpRunAndWait, waiting_time=5)
-            
-            meas_name = exp_name + f"-{i_meas:05d}"
-            self.save_meas(save_folder, meas_name)
-            
-            dset = self.get_dataset(xeprset="primary")
             # Correct along time
             # Assuming flash after 30 ns
-            bl_region_t = self.baseline_region(dset.x, "range", 30)
+            
+            # TODO here one of the two should be dset.y, not dset.x
+            bl_region_t = self.baseline_region(x, "range", 30)
             y_mid, bl_mid = self.correct_baseline(
-                dset.o, dim=0, region=bl_region_t)
+                ord0, dim=0, region=bl_region_t)
             # Correct along field
-            bl_region_bfield = self.baseline_region(dset.x, "width", 0.15)
+            bl_region_bfield = self.baseline_region(x, "width", 0.15)
             y_fin, bl_fin = self.correct_baseline(
                 y_mid, dim=1, region=bl_region_bfield)
             
-            # SNR of the last measurement
-            snr, _, _ = self.calculate_snr(y_fin, bl_region_bfield)
-
-            # Update SNR of the whole experiment
-            cur_snr = (cur_snr * (i_meas ** 2 - 1) + snr) / np.sqrt(i_meas)
+        # SNR of first scan
+        snr, _, _ = self.calculate_snr(y_fin, bl_region_bfield)
+        
+        n_scan = int(np.ceil((goal_snr/snr)**2))
+        if n_scan < 2:
+            return
+        
+        for i_meas in range(2, n_scan + 1):
+            # Adjust lock offset
+            # status = self.adjust_lock_offset()
+            # if status == -1:
+                # logging.info('Exceeded max time for adjustLockOffset')
+                
+            # Run scan
+            self._command_wait(exp.aqExpRunAndWait, waiting_time=5)
+            
+            meas_name = exp_name + f"-{i_meas:05d}"
+            self.save_meas(save_folder, meas_name)
 
         return 0
 
@@ -253,7 +281,7 @@ class XeprPlusLogic():
         i_meas = 0
         time_now = datetime.now()
         time_end = time_now + timedelta(hours=hours, minutes=minutes)
-        cur_exp = self.xepr.XeprExperiment()
+        exp = self.xepr.XeprExperiment()
         while time_now < time_end:
             # Adjust lock offset
             # status = self.adjust_lock_offset()
@@ -261,7 +289,7 @@ class XeprPlusLogic():
                 # logging.info('Exceeded max time for adjustLockOffset')
                 
             i_meas += 1
-            self._command_wait(cur_exp.aqExpRunAndWait, waiting_time=5)
+            self._command_wait(exp.aqExpRunAndWait, waiting_time=5)
             
             meas_name = exp_name + f"-{i_meas:05d}"
             self.save_meas(save_folder, meas_name)
@@ -273,11 +301,11 @@ class XeprPlusLogic():
 
     def save_meas(self, folder, meas_name):
         save_path = os.path.join(folder, meas_name)
-        cur_exp = self.xepr.XeprExperiment()
+        exp = self.xepr.XeprExperiment()
         # Exp to primary window
-        self.xepr.XeprCmds.aqExpSelect(1, cur_exp.aqGetExpName())
+        self.xepr.XeprCmds.aqExpSelect(1, exp.aqGetExpName())
         self.xepr.XeprCmds.vpSave("Current", "Primary", meas_name, save_path)
         # Exp to primary window
-        self.xepr.XeprCmds.aqExpSelect(1, cur_exp.aqGetExpName())
+        self.xepr.XeprCmds.aqExpSelect(1, exp.aqGetExpName())
 
         

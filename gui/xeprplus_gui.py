@@ -8,7 +8,7 @@ from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
 from matplotlib.figure import Figure
 import numpy as np
 import os
-import peasyspin as pes
+# import peasyspin as pes
 import shutil
 import sys
 import threading
@@ -436,7 +436,7 @@ class XeprPlusGui():
         self._mw.logs_area.see(tk.END)
     
     
-    def _update_gui(self):
+    def _update_gui(self, future=None):
         if self._logic.xepr and self._logic.xepr.XeprActive():
             self._mw.new_exp_button.config(state="active")
             self._mw.run_meas_button.config(state="active")   
