@@ -1,4 +1,6 @@
-# Locate the XeprAPI module
+# %%
+#  Locate the XeprAPI module
+from datetime import datetime, timedelta
 import numpy as np
 import os
 import peasyspin as pes
@@ -12,6 +14,7 @@ class XeprPlusLogic():
         self.xepr = None
         self.exps = []
         self.exp_names = []
+        self.stop_meas = 0
         return
 
     def _check_exp_name(self, exp_name):
@@ -178,6 +181,7 @@ class XeprPlusLogic():
 
     def open_xepr_api(self):
         print('Open xepr api.')
+        self.xepr = XeprXepr()
         return 0
 
         
@@ -196,12 +200,21 @@ class XeprPlusLogic():
         return 0
 
 
-    def run_measurement_for_time(self, folder, exp_name, hours, minutes):
-        print("run measurement for time")
+    def run_meas_time_duration(self, folder, exp_name, hours, minutes):
+        print("run_meas_time_duration")
         print("folder:", folder)
         print("exp_name", exp_name)
         print("hours:", hours)
         print("minutes:", minutes)
+
+        time_now = datetime.now()
+        time_end = time_now + timedelta(hours=hours, minutes=minutes)
+        while time_now < time_end:
+            print('self stop:', self.stop)
+            time.sleep(3)
+            if self.stop == 1:
+                break
+
         return 0
     
 
@@ -228,4 +241,7 @@ class DatasetXepr():
     def getTitle(self):
         return "Test set " + str(random.randint(10, 99))
     
+class XeprXepr():
+    def XeprActive(self):
+        return 1
     
