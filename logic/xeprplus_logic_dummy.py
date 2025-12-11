@@ -40,14 +40,30 @@ class XeprPlusLogic():
     
 
     def baseline_region(self, x, bl_type="width", region=0.15):
-        if type == "width":
+        if bl_type == "width":
             left = np.min(x) + (np.max(x) - np.min(x)) * region
             right = np.max(x) - (np.max(x) - np.min(x)) * region
-            return (x < left) | (x > right)
-        elif type == "range":
+            return (x <= left) | (x >= right)
+        elif bl_type == "range":
+            if not isinstance(region, list):
+                raise Exception(
+                    "For bl_type equal 'range' region must be a list.")
+            if not isinstance(region[0], list):
+                region = [region]
+                if not len(region[0]) == 2:
+                    raise Exception(
+                        "For bl_type equal 'range' region must be a list of " + 
+                        "len 2 or a list of lists of len 2.")
+            if isinstance(region[0], list):
+                for reg in region:
+                    if not len(reg) == 2:
+                        raise Exception(
+                            "For bl_type equal 'range' region " +
+                            "be a list of len 2 or a list of lists of len 2.")
+            
             bl = [False for _ in range(len(x))]
             for reg in region:
-                new_bl = (x > reg[0]) & (x < reg[0])
+                new_bl = (x >= reg[0]) & (x <= reg[1])
                 bl = bl | new_bl
             return bl
         
@@ -94,8 +110,9 @@ class XeprPlusLogic():
                 f"Polynomial order n={n} must be smaller than"
                 "data size {data.shape[dim]}"
             )
-
-        if data.ndim == 1:
+        
+        orig_ndim = data.ndim
+        if orig_ndim == 1:
             data = np.reshape(data, [data.size, 1])
 
         x = np.linspace(-1, 1, data.shape[dim])
@@ -121,8 +138,12 @@ class XeprPlusLogic():
             baseline = baseline.T
             data = data.T
 
+        if orig_ndim == 1:
+            data = np.squeeze(data)
+            baseline = np.squeeze(baseline)
+            
         datacorr = data - baseline
-
+        
         return datacorr, baseline
 
 

@@ -44,7 +44,7 @@ class XeprPlusLogic():
         WAIT_TIME = 1.5  # Not too short or the Lock offset is more prone to jumps
         GOAL_OFFSET = 5.
         
-        cur_offset = round(self.hidden_exp['LockOffset'].value, 2);
+        cur_offset = round(self.hidden_exp['LockOffset'].value, 2)
         # if np.abs(cur_offset) > GOAL_OFFSET:
         #     ts = time.strftime("%H:%M:%S")  # Timestamp        
         #     print(ts + ': adjusting lock offset...')
@@ -77,14 +77,29 @@ class XeprPlusLogic():
         if bl_type == "width":
             left = np.min(x) + (np.max(x) - np.min(x)) * region
             right = np.max(x) - (np.max(x) - np.min(x)) * region
-            return (x < left) | (x > right)
+            return (x <= left) | (x >= right)
         elif bl_type == "range":
+            if not isinstance(region, list):
+                raise Exception(
+                    "For bl_type equal 'range' region must be a list.")
+            if not isinstance(region[0], list):
+                region = [region]
+                if not len(region[0]) == 2:
+                    raise Exception(
+                        "For bl_type equal 'range' region must be a list of " + 
+                        "len 2 or a list of lists of len 2.")
+            if isinstance(region[0], list):
+                for reg in region:
+                    if not len(reg) == 2:
+                        raise Exception(
+                            "For bl_type equal 'range' region " +
+                            "be a list of len 2 or a list of lists of len 2.")
+            
             bl = [False for _ in range(len(x))]
             for reg in region:
-                new_bl = (x > reg[0]) & (x < reg[0])
+                new_bl = (x >= reg[0]) & (x <= reg[1])
                 bl = bl | new_bl
             return bl
-
 
     def calculate_snr(self, y, noise_idx, mode="std"):
         if y.ndim == 1:
@@ -161,7 +176,6 @@ class XeprPlusLogic():
             
         datacorr = data - baseline
         
-            
         return datacorr, baseline
     
 
@@ -192,7 +206,7 @@ class XeprPlusLogic():
     def load_data(self, path, viewport):
         # Viewport should be 'primary' or 'secondary'
         args = [path, 'None', viewport]
-        self._command_wait(self._logic.xepr.XeprCmds.vpLoad, *args)
+        self._command_wait(self.xepr.XeprCmds.vpLoad, *args)
 
 
     def open_xepr_api(self):
@@ -200,7 +214,8 @@ class XeprPlusLogic():
             self.xepr = XeprAPI.Xepr(verbose=False)
             self.hidden_exp = self.xepr.XeprExperiment('AcqHidden')
             return 0
-        except:
+        except Exception as e:
+            print(e)
             return -1
 
 
@@ -212,63 +227,72 @@ class XeprPlusLogic():
     
     
     def run_meas_goal_snr(self, folder, exp_name, goal_snr):
-        # Create save folder and variables
-        save_folder = os.path.join(folder, exp_name)
-        os.mkdir(save_folder)
-        
-        # Get current experiment
-        exp = self.xepr.XeprExperiment()
-        
-        # Run first scan
-        self._command_wait(exp.aqExpRunAndWait, waiting_time=5)
-        meas_name = exp_name + f"-{1:05d}"
-        self.save_meas(save_folder, meas_name)
-        
-        # SNR per scan
-        # Calculate SNR after baseline correction
-        dset = self.get_dataset(xeprset="primary")
-        ord0 = np.array(dset.O)
-        x = np.array(dset.X)
-        
-        if ord0.ndim == 1:
-            # Correct along field
-            bl_region_bfield = self.baseline_region(x, "width", 0.15)
+        try:        
+            # Create save folder and variables
+            save_folder = os.path.join(folder, exp_name)
+            os.mkdir(save_folder)
             
-            y_fin, bl_fin = self.correct_baseline(
-                ord0, region=bl_region_bfield)
-        else:
-                
-            # Correct along time
-            # Assuming flash after 30 ns
+            # Get current experiment
+            exp = self.xepr.XeprExperiment()
             
-            # TODO here one of the two should be dset.y, not dset.x
-            bl_region_t = self.baseline_region(x, "range", 30)
-            y_mid, bl_mid = self.correct_baseline(
-                ord0, dim=0, region=bl_region_t)
-            # Correct along field
-            bl_region_bfield = self.baseline_region(x, "width", 0.15)
-            y_fin, bl_fin = self.correct_baseline(
-                y_mid, dim=1, region=bl_region_bfield)
-            
-        # SNR of first scan
-        snr, _, _ = self.calculate_snr(y_fin, bl_region_bfield)
-        
-        n_scan = int(np.ceil((goal_snr/snr)**2))
-        if n_scan < 2:
-            return
-        
-        for i_meas in range(2, n_scan + 1):
-            # Adjust lock offset
-            # status = self.adjust_lock_offset()
-            # if status == -1:
-                # logging.info('Exceeded max time for adjustLockOffset')
-                
-            # Run scan
+            # Run first scan
+            status = self.adjust_lock_offset()
             self._command_wait(exp.aqExpRunAndWait, waiting_time=5)
-            
-            meas_name = exp_name + f"-{i_meas:05d}"
+            meas_name = exp_name + f"-{1:05d}"
             self.save_meas(save_folder, meas_name)
-
+            
+            # SNR per scan
+            # Calculate SNR after baseline correction
+            dset = self.get_dataset(xeprset="primary")
+            ord0 = np.array(dset.O)
+            # Abscissa 1 is field for 1D data, time for 2D data
+            x = np.array(dset.X)  # Abscissa 1
+            
+            if ord0.ndim == 1:
+                # Correct along field
+                bl_region_bfield = self.baseline_region(x, "width", 0.15)
+                
+                ord_fin, bl_fin = self.correct_baseline(
+                    ord0, region=bl_region_bfield)
+            else:
+                # Here x is time and y is field
+                y = np.array(dset.Y)  # Abscissa 2
+                # Correct along time
+                # Assuming flash after 30 ns
+                bl_region_t = self.baseline_region(x, "range", [0, 30])
+                print(bl_region_t)
+                ord_mid, bl_mid = self.correct_baseline(
+                    ord0, dim=1, region=bl_region_t)
+                print('a')
+                # Correct along field
+                bl_region_bfield = self.baseline_region(y, "width", 0.15)
+                print(bl_region_bfield)
+                ord_fin, bl_fin = self.correct_baseline(
+                    ord_mid, dim=0, region=bl_region_bfield)
+                
+            # SNR of first scan
+            snr, _, _ = self.calculate_snr(ord_fin, bl_region_bfield)
+            
+            n_scan = int(np.ceil((goal_snr/snr)**2))
+            print(n_scan, snr)
+            if n_scan < 2:
+                return
+            
+            for i_meas in range(2, n_scan + 1):
+                # Adjust lock offset
+                status = self.adjust_lock_offset()
+                # if status == -1:
+                    # logging.info('Exceeded max time for adjustLockOffset')
+                    
+                # Run scan
+                self._command_wait(exp.aqExpRunAndWait, waiting_time=5)
+                
+                meas_name = exp_name + f"-{i_meas:05d}"
+                self.save_meas(save_folder, meas_name)
+        except Exception as e:
+            print(e)
+            
+        self.xepr.XeprCmds.aqParSet('AcqHidden', '*gTempCtrl.Temperature', 225.00)
         return 0
 
 
@@ -284,7 +308,7 @@ class XeprPlusLogic():
         exp = self.xepr.XeprExperiment()
         while time_now < time_end:
             # Adjust lock offset
-            # status = self.adjust_lock_offset()
+            status = self.adjust_lock_offset()
             # if status == -1:
                 # logging.info('Exceeded max time for adjustLockOffset')
                 
@@ -296,6 +320,7 @@ class XeprPlusLogic():
             
             time_now = datetime.now()
             
+        self.xepr.XeprCmds.aqParSet('AcqHidden', '*.gTempCtrl.Temperature', '225.00')
         return 0
 
 
@@ -308,4 +333,7 @@ class XeprPlusLogic():
         # Exp to primary window
         self.xepr.XeprCmds.aqExpSelect(1, exp.aqGetExpName())
 
+        
+    def set_temperature(self, t):
+        self.xepr.XeprCmds.aqParSet('AcqHidden', '*gTempCtrl.Temperature', t)
         

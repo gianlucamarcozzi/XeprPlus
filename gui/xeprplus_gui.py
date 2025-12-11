@@ -306,7 +306,18 @@ class XeprPlusRunMeasWindow():
         self.mid_frame.columnconfigure(0, weight=0)
         self.mid_frame.columnconfigure(1, weight=1) 
         self.mid_frame.columnconfigure(2, weight=0) 
+        
+        # Mid low frame
+        self.mid_low_frame = ttk.Frame(self.win, width=300)
+        self.mid_low_frame.pack(
+            side=tk.TOP, expand=True, fill=tk.BOTH, padx=10, anchor='center')
 
+        self.set_temperature_label = ttk.Label(
+            self.mid_low_frame, text="Set temperature at the end (K):")
+        self.set_temperature_label.grid(row=0, column=0, sticky="w")
+        self.set_temperature_entry = ttk.Entry(self.mid_low_frame, width=5)
+        self.set_temperature_entry.grid(row=0, column=1, sticky="ew")
+        
         # Bottom frame (buttons)
         self.down_frame = ttk.Frame(self.win, width=300, height=100)
         self.down_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, anchor="center")
@@ -608,8 +619,8 @@ class XeprPlusGui():
         self._daw.win.lift()
         self._daw.win.focus()
         
-        for f in load_files:
-            if f.endswith('.DSC') or f.endswith('.DTA') or f.endswith('.YGA'):
+        for f in load_files:            
+            if f.name.endswith((".DSC", ".DTA", ".YGA")):
                 self.daw_load_single_dataset(f.name)
                 self._print_log("Load dataset ")
             else:
@@ -782,7 +793,7 @@ class XeprPlusGui():
         save_name = self._rmw.save_name_entry.get()
         path = os.path.join(save_folder, save_name)
         
-        # Handle missing entries
+        # Handle error missing entries
         if save_folder == "" or save_name == "":
             self._mw.win.focus()
             tk.messagebox.showerror("Run measurement",
@@ -791,7 +802,7 @@ class XeprPlusGui():
             self._rmw.win.focus()
             return
         
-        # Handle folder does not exist
+        # Handle error folder does not exist
         if not os.path.isdir(save_folder):
             self._mw.win.focus()
             tk.messagebox.showerror("Run measurement",
@@ -799,7 +810,7 @@ class XeprPlusGui():
             self._rmw.win.lift()
             self._rmw.win.focus()
             
-        # Handle overwriting
+        # Handle warning overwriting
         if os.path.isdir(path):
             # Folder
             self._mw.win.focus()
@@ -829,6 +840,7 @@ class XeprPlusGui():
                 self._rmw.win.focus()
                 return
         
+        # Prepare for run measurement
         self._rmw.win.withdraw()
         if self._rmw.run_type.get() == 0:
             args = (save_folder, save_name)
@@ -856,21 +868,24 @@ class XeprPlusGui():
             time_duration_m = int(time_duration_m)
             args = (save_folder, save_name, time_duration_h, time_duration_m)
             meas_fun = self._logic.run_meas_time_duration
+            
+        # Get the set tempeature value
+        temperature_after = self._rmw.set_temperature_entry.get()
+        
         self.meas_fut = self.executor.submit(meas_fun, *args)
         # update_gui as soon as starts and at the end
         self._update_gui()
         self.meas_fut.add_done_callback(self._update_gui)
-        '''
-        self.meas_thread = threading.Thread(
-            target=self._logic.run_meas_time_duration,
-            args=(save_folder, save_name, time_duration_h, time_duration_m)
-        )
-        self.meas_thread.daemon = True  # Dies with main thread
-        self.meas_thread.start()
-        self.is_running = 1
         
-        self._update_gui()
-        '''
+        # Set new temperature at the end
+        if temperature_after:
+            self.meas_fut.add_done_callback(
+                lambda fut: self._logic.set_temperature(temperature_after)
+            )
+            print_msg = f"Temperature set to {temperature_after}"
+            self.meas_fut.add_done_callback(
+                lambda fut: self._print_log(print_msg)
+            )
 
 
     def rmw_save_folder_browse_button_clicked(self):
