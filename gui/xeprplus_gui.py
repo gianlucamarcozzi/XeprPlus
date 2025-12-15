@@ -1,10 +1,10 @@
 # %%
+
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import glob
 from matplotlib import rcParams
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
 from matplotlib.figure import Figure
 import numpy as np
 import os
@@ -19,6 +19,7 @@ from tkinter import ttk
 from types import SimpleNamespace
 from xeprplus_widgets.long_press_button import LongPressButton
 from xeprplus_widgets.radio_treeview import RadioTreeview
+from xeprplus_widgets.vertical_navigation_toolbar_2_tk import VerticalNavigationToolbar2Tk
 
 
 class XeprPlusDataAnalysisWindow():
@@ -122,9 +123,6 @@ class XeprPlusDataAnalysisWindow():
         self.dataset_treeview.configure(
             yscrollcommand=self.dataset_scrollbar.set)
 
-        # Notebook
-        self.fig_notebook = ttk.Notebook(self.right_frame)
-        self.fig_notebook.pack(expand=True, fill=tk.BOTH)
         self.plot_colors = rcParams['axes.prop_cycle'].by_key()['color']
         
         
@@ -139,35 +137,217 @@ class XeprPlusMainWindow():
     def __init__(self):
         self.win = tk.Tk()
         self.win.title("XeprPlus")
-        self.win.geometry("510x260")
-        self.win.minsize(510, 260)
+        self.win.wm_attributes("-zoomed", True)
 
         # Menubar
+        # Menubar with file menu and options menu
         self.menubar = tk.Menu(self.win)
+        self.win.config(menu=self.menubar)
 
         # File menu
-        file_menu = tk.Menu(self.menubar, tearoff=0)
-        file_menu.add_command(label="Open")
-        file_menu.add_command(label="Save")
-        file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self.win.quit)
-        self.menubar.add_cascade(label="File", menu=file_menu)
+        self.file_menu = tk.Menu(self.menubar, tearoff=0)
+        self.file_menu.add_command(label="Open")
+        self.file_menu.add_command(label="Save")
+        self.file_menu.add_separator()
+        self.file_menu.add_command(label="Exit", command=self.win.quit)
 
         # Options menu
         self.options_menu = tk.Menu(self.menubar, tearoff=0)
         self.options_menu.add_command(label="Open XeprAPI")
         self.options_menu.add_command(label="Close XeprAPI")
+
+        # Measurement menu
+        self.meas_menu = tk.Menu(self.menubar, tearoff=0)
+        self.create_exp_menu = tk.Menu(self.meas_menu, tearoff=0)
+        self.create_exp_menu.add_command(label="C.W.")
+        self.create_exp_menu.add_command(label="Transient")
+        self.create_exp_menu.add_command(label="Pulse")
+        self.meas_menu.add_command(label="Activate VTU")
+
+        self.menubar.add_cascade(label="File", menu=self.file_menu)
         self.menubar.add_cascade(label="Options", menu=self.options_menu)
+        self.menubar.add_cascade(label="Options", menu=self.meas_menu)
+        self.meas_menu.add_cascade(label="Create experiment", 
+                                   menu=self.create_exp_menu)
 
-        self.win.config(menu=self.menubar)
+        # Central area
+        # Notebook with different tabs
+        self.notebook = ttk.Notebook(self.win)
+        self.notebook.pack(side=tk.TOP, expand=True, fill=tk.BOTH)
 
-        # Text
-        self.logs_area = tk.Text(self.win, height=10, width=50)
-        self.logs_area.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
+        self.meas_frame = ttk.Frame(self.win)  # Tab
+        self.notebook.add(self.meas_frame, text="Measurement")
+
+        # Measurement tab
+        # Various functionalities connected with measurements: run and stop
+        # measurement, set parameters and visualize data
+        # Upper part: frame to create experiments and set parameters
+        self.meas_exp_frame = ttk.Frame(self.meas_frame)
+        self.meas_exp_frame.pack(side=tk.TOP, expand=False, fill=tk.BOTH)
+
+        # Frame run and stop measurement (on the left)
+        self.meas_send_run_stop_frame = ttk.Frame(self.meas_exp_frame)
+        self.meas_send_run_stop_frame.pack(
+            side=tk.LEFT, expand=True, fill=tk.BOTH
+        )
+
+        self.meas_exp_select_combobox = ttk.Combobox(
+            self.meas_send_run_stop_frame,
+            textvariable="",
+            values=["Continuous Wave", "Transient", "Pulse"]
+        )
+        self.meas_exp_select_combobox.grid(row=0, column=0, sticky="ew")
+        self.meas_send_to_spectr_button = tk.Button(
+            self.meas_send_run_stop_frame,
+            text="Send to spectrometer"
+        )
+        self.meas_send_to_spectr_button.grid(row=0, column=1, sticky="ew")     
+        self.meas_run_button = tk.Button(self.meas_send_run_stop_frame,
+                                         text="Run")
+        self.meas_run_button.grid(row=1, column=0, sticky="ew")
+        self.meas_stop_end_button = tk.Button(self.meas_send_run_stop_frame,
+                                         text="Stop (end)")
+        self.meas_stop_end_button.grid(row=1, column=1, sticky="ew")
+
+        self.meas_run_button.columnconfigure(0, weight=0)
+        self.meas_run_button.columnconfigure(1, weight=0) 
+        
+        # Frame save measurement (on the right)
+        self.save_meas_frame = ttk.Frame(self.meas_exp_frame)
+        self.save_meas_frame.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
+        
+        self.save_folder_label = ttk.Label(
+            self.save_meas_frame, text="Save to folder:"
+        )
+        self.save_folder_label.grid(row=0, column=0, sticky="w")
+        self.save_folder_entry = ttk.Entry(self.save_meas_frame)
+        self.save_folder_entry.grid(row=0, column=1, sticky="ew")
+        self.save_folder_browse_button = tk.Button(
+            self.save_meas_frame, text="Browse..."
+        )
+        self.save_folder_browse_button.grid(row=0, column=2, sticky="w")
+        self.save_name_label = ttk.Label(
+            self.save_meas_frame, text="Dataset name:"
+        )
+        self.save_name_label.grid(row=1, column=0, sticky="w")
+        self.save_name_entry = ttk.Entry(self.save_meas_frame)
+        self.save_name_entry.grid(row=1, column=1, sticky="ew")
+        # Configure columns resize behavior
+        self.save_meas_frame.columnconfigure(0, weight=0)
+        self.save_meas_frame.columnconfigure(1, weight=1) 
+        
+        # Frame for experimental parameters
+        # Here there are radiobuttons to choose the type of experiment and the
+        # parameters, that dynamically change depending on the selected
+        # radiobutton.
+        self.meas_params_frame = tk.Frame(self.meas_frame)
+        self.meas_params_frame.pack(side=tk.TOP, expand=False, fill=tk.X)
+
+        '''
+        self.meas_params_type_frame = tk.Frame(self.meas_params_frame)
+        self.meas_params_type_frame.pack(side=tk.TOP, expand=False, fill=tk.X)
+
+        self.meas_exp_type = tk.IntVar()
+        self.meas_exp_type_cw_radiobutton = tk.Radiobutton(
+            self.meas_params_type_frame, text="Continuous wave EPR",
+            variable=self.meas_exp_type, value=0
+        )
+        self.meas_exp_type_cw_radiobutton.pack(side=tk.LEFT)
+        self.meas_exp_type_tr_radiobutton = tk.Radiobutton(
+            self.meas_params_type_frame, text="Transient EPR",
+            variable=self.meas_exp_type, value=1
+        )
+        self.meas_exp_type_tr_radiobutton.pack(side=tk.LEFT)
+        self.meas_exp_type_pulse_radiobutton = tk.Radiobutton(
+            self.meas_params_type_frame, text="Pulse EPR",
+            variable=self.meas_exp_type, value=2
+        )
+        self.meas_exp_type_pulse_radiobutton.pack(side=tk.LEFT)
+        self.meas_exp_type.initialize(0)
+        '''
+
+        self.meas_params_params_frame = tk.Frame(self.meas_params_frame)
+        self.meas_params_params_frame.pack(side=tk.TOP, expand=False, fill=tk.X)
+
+        # Two empty spaced for aesthetics
+        empty = tk.Label(self.meas_params_params_frame)
+        empty.grid(row=0, column=0)
+        empty2 = tk.Label(self.meas_params_params_frame)
+        empty2.grid(row=1, column=0)
+        
+        # Top paned window
+        # In the central go the canvas for plots and the tree and logs frame
+        self.central_pane = tk.PanedWindow(self.meas_frame, orient="vertical")
+        self.central_pane.pack(side=tk.TOP, expand=True, fill=tk.BOTH)
+
+        # Canvas for plots
+        # Canvas to visualize datasets in the middle of the GUI
+        self.meas_fig_frame = tk.Frame(self.central_pane)
+        self.central_pane.add(self.meas_fig_frame, stretch="always")
+
+        self.meas_fig = Figure(dpi=100)
+        self.meas_ax = self.meas_fig.add_subplot(111)
+        self.meas_fig.tight_layout()
+        self.meas_fig_canvas = FigureCanvasTkAgg(self.meas_fig,
+                                                 master=self.meas_fig_frame)
+        self.meas_fig_canvas_widget = self.meas_fig_canvas.get_tk_widget()
+        self.meas_fig_canvas_widget.pack(
+            side=tk.RIGHT, expand=True, fill=tk.BOTH
+        )
+
+        # Navigation toolbar
+        self.meas_fig_toolbar_frame = tk.Frame(self.meas_fig_frame)
+        self.meas_fig_toolbar_frame.pack(side=tk.RIGHT, fill=tk.X)
+
+        self.meas_fig_toolbar = VerticalNavigationToolbar2Tk(
+            self.meas_fig_canvas, self.meas_fig_toolbar_frame)
+        self.meas_fig_toolbar.update()
+        self.meas_fig_toolbar.pack(side=tk.TOP, expand=False)
+
+        # Draw
+        self.meas_fig_canvas.draw()
+        
+        # Treeview with radiobuttons and logs text area
+        # In this paned window: on the left, a frame with a custom made
+        # treeview with radiobuttons to select the datasets to display on the
+        # above fig canvas (with scrollbar); on the right, a frame with a text
+        # area to print logs.
+        self.meas_tree_and_logs_pane = tk.PanedWindow(self.central_pane, 
+                                                      orient="horizontal")
+        self.central_pane.add(self.meas_tree_and_logs_pane, stretch="always")
+
+        # Treeview
+        self.meas_tree_frame = tk.Frame(self.meas_tree_and_logs_pane)
+        self.meas_tree_and_logs_pane.add(
+            self.meas_tree_frame, stretch="always"
+        )
+
+        self.meas_tree = RadioTreeview(
+            self.meas_tree_frame,
+            columns=("name",),      # 'radio' will be added automatically
+            show="tree headings"    # show tree column (#0) + headings
+        )
+        self.meas_tree.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
+        self.meas_dataset_scrollbar = ttk.Scrollbar(
+            self.meas_tree_frame, orient="vertical", 
+            command=self.meas_tree.yview
+        )
+        self.meas_dataset_scrollbar.pack(side=tk.LEFT, fill="y")
+        self.meas_tree.configure(
+            yscrollcommand=self.meas_dataset_scrollbar.set
+        )
+        
+        # Frame for logs text area
+        self.logs_frame = tk.Frame(self.meas_tree_and_logs_pane)
+        self.meas_tree_and_logs_pane.add(
+            self.logs_frame, stretch="always"
+        )
+        self.logs_area = tk.Text(self.logs_frame)
+        self.logs_area.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
         
         # Buttons
-        self.bottom_frame = ttk.Frame(self.win, height=5, width=200)
-        self.bottom_frame.grid(row=2, column=0, padx=5, pady=5, sticky="ew")
+        self.bottom_frame = ttk.Frame(self.meas_frame, height=5, width=200)
+        self.bottom_frame.pack(side=tk.TOP, expand=False, fill=tk.BOTH)
         self.new_exp_button = tk.Button(self.bottom_frame, text="New exp")
         self.new_exp_button.grid(row=0, column=0)
         self.run_meas_button = tk.Button(self.bottom_frame, text="Run meas")
@@ -183,51 +363,15 @@ class XeprPlusMainWindow():
         self.pulsespel_button = tk.Button(self.bottom_frame, text="PulseSPEL")
         self.pulsespel_button.grid(row=0, column=5)
 
-        self.win.rowconfigure(0, weight=0)
-        self.win.rowconfigure(1, weight=1)
-        self.win.rowconfigure(2, weight=0)
-        self.win.columnconfigure(0, weight=1)
+        # self.win.rowconfigure(0, weight=0)
+        
+        # self.win.rowconfigure(1, weight=1)
+        # self.win.rowconfigure(2, weight=0)
+        # self.win.columnconfigure(0, weight=1)
 
         self.new_exp_button.config(state="disabled")
         self.run_meas_button.config(state="disabled")
-        
-        
-class XeprPlusNewExpWindow():
 
-    def __init__(self, top_level):
-        self.win = tk.Toplevel(top_level)
-        self.win.title("New Experiment")
-        self.win.geometry("300x100")
-        # Non resizable width nor height
-        self.win.resizable(False, False)
-
-        # Upper frame (radio buttons)
-        self.up_frame = ttk.Frame(self.win, width=300, height=100)
-        self.up_frame.pack(side=tk.TOP, expand=True, anchor='center')
-
-        self.exp_type = tk.IntVar()
-        self.cw_radiobutton = tk.Radiobutton(
-            self.up_frame, text="C.W.", variable=self.exp_type, value=0)
-        self.cw_radiobutton.grid(row=0, column=0)
-        self.transient_radiobutton = tk.Radiobutton(
-            self.up_frame, text="Transient", variable=self.exp_type, value=1)
-        self.transient_radiobutton.grid(row=0, column=1)
-        self.pulse_radiobutton = tk.Radiobutton(
-            self.up_frame, text="Pulse", variable=self.exp_type, value=2)
-        self.pulse_radiobutton.grid(row=0, column=2)
-        self.exp_type.initialize(0)
-        
-        # Bottom frame (buttons)
-        self.down_frame = ttk.Frame(self.win, width=300, height=100)
-        self.down_frame.pack(side=tk.TOP, expand=True, anchor='center')
-
-        self.create_button = tk.Button(self.down_frame, text="Create")
-        self.create_button.grid(row=0, column=0, padx=15, pady=10, sticky="ew")
-        self.cancel_button = tk.Button(self.down_frame, text="Cancel")
-        self.cancel_button.grid(row=0, column=1, padx=15, pady=10, sticky="ew")
-    
-        self.win.rowconfigure(0, weight=1)
-        self.win.columnconfigure(0, weight=1)
 
 
 class XeprPlusRunMeasWindow():
@@ -347,7 +491,7 @@ class XeprPlusGui():
         self._mw = XeprPlusMainWindow()
         self._print_log("Start XeprPlus.")
         # New experiment window (nexw)
-        self._nexw = XeprPlusNewExpWindow(self._mw.win)
+        # self._nexw = XeprPlusNewExpWindow(self._mw.win)
         # Run measurement window (rmw)
         self._rmw = XeprPlusRunMeasWindow(self._mw.win)
         # Data analysis window (daw)
@@ -357,20 +501,21 @@ class XeprPlusGui():
         self.meas_fut = None  # Initialize as None
         
         # Do not open as soon as called
-        self._nexw.win.withdraw()
+        # self._nexw.win.withdraw()
         self._rmw.win.withdraw()
         self._daw.win.withdraw()
         # Change default behavior of clicking "X" button
         self._mw.win.protocol("WM_DELETE_WINDOW", self._on_closing)
-        self._nexw.win.protocol("WM_DELETE_WINDOW",
-                                   self._nexw.win.withdraw)
+        # self._nexw.win.protocol("WM_DELETE_WINDOW",
+        #                            self._nexw.win.withdraw)
         self._rmw.win.protocol("WM_DELETE_WINDOW",
                                     self._rmw.win.withdraw)        
         self._daw.win.protocol("WM_DELETE_WINDOW",
                                    self._daw.win.withdraw)
 
         # Create first canvas for data analysis window
-        self.daw_new_figure_button_clicked()
+        # self.daw_new_figure_button_clicked()
+        self.send_to_spectr_button_clicked()
 
         # Connect widgets to functions
         # Menubar
@@ -384,10 +529,10 @@ class XeprPlusGui():
         self._mw.data_analysis_button.config(
             command=self.mw_data_analysis_button_clicked)
         
-        self._nexw.cancel_button.config(
-            command=self.nexw_cancel_button_clicked)
-        self._nexw.create_button.config(
-            command=self.nexw_create_button_clicked)
+        # self._nexw.cancel_button.config(
+        #     command=self.nexw_cancel_button_clicked)
+        # self._nexw.create_button.config(
+        #     command=self.nexw_create_button_clicked)
         
         self._rmw.save_folder_browse_button.config(
             command=self.rmw_save_folder_browse_button_clicked)
@@ -404,6 +549,17 @@ class XeprPlusGui():
         self._rmw.run_time_duration_radiobutton.config(
             command=self.rmw_update_win)
 
+        '''
+        self._mw.meas_exp_type_cw_radiobutton.config(
+            command=self.meas_tab_update_params_exp_type)
+        self._mw.meas_exp_type_tr_radiobutton.config(
+            command=self.meas_tab_update_params_exp_type)
+        self._mw.meas_exp_type_pulse_radiobutton.config(
+            command=self.meas_tab_update_params_exp_type)
+        '''
+        self._mw.meas_send_to_spectr_button.config(
+            command=self.send_to_spectr_button_clicked
+        )
         # TODO connect self._daw.advanced_options_button
         self._daw.clear_figure_button.config(
             command=self.daw_clear_figure_button_clicked)
@@ -423,8 +579,9 @@ class XeprPlusGui():
             command=self.daw_new_figure_button_clicked)
         self._daw.dataset_treeview.bind("<Button-1>",
                                         self.daw_dataset_treeview_clicked)
-        self._daw.fig_notebook.bind("<<NotebookTabChanged>>",
-                                    self.daw_fig_notebook_tab_changed)
+        # self._daw.fig_notebook.bind("<<NotebookTabChanged>>",
+        #                             self.daw_fig_notebook_tab_changed)
+
 
         # TODO add some if statement
         # Auto connect to XeprAPI at startup
@@ -730,6 +887,178 @@ class XeprPlusGui():
     def daw_remove_selected_colors(self, rmv_iids):
         for i in sorted(rmv_iids, reverse=True):
             self._daw.selected_colors.pop(i)
+
+
+    def send_to_spectr_button_clicked(self):
+        frame = self._mw.meas_params_params_frame
+        # Clear all widgets from the frame
+        for widget in frame.winfo_children():
+            widget.destroy()  # deleting widget
+
+        exp_type = self._mw.meas_exp_select_combobox.get()
+        if exp_type == "Continuous Wave":
+            # cw
+            self._mw.meas_cw_field_start_label = ttk.Label(
+            frame, text="Start Field (G)"
+            )
+            self._mw.meas_cw_field_start_label.grid(row=0, column=0, sticky="ew")
+            self._mw.meas_cw_field_start_entry = ttk.Entry(frame)
+            self._mw.meas_cw_field_start_entry.grid(row=0, column=1, sticky="ew")
+            self._mw.meas_cw_field_stop_label = ttk.Label(
+                frame, text="Stop Field (G)")
+            self._mw.meas_cw_field_stop_label.grid(row=0, column=2, sticky="ew")
+            self._mw.meas_cw_field_stop_entry = ttk.Entry(frame)
+            self._mw.meas_cw_field_stop_entry.grid(row=0, column=3, sticky="ew")
+            self._mw.meas_cw_field_step_label = ttk.Label(frame,
+                                                text="Step Field (G)")
+            self._mw.meas_cw_field_step_label.grid(row=0, column=4, sticky="ew")
+            self._mw.meas_cw_field_step_entry = ttk.Entry(frame)
+            self._mw.meas_cw_field_step_entry.grid(row=0, column=5, sticky="ew")
+            self._mw.meas_cw_field_center_label = ttk.Label(frame,
+                                                text="Center Field (G)")
+            self._mw.meas_cw_field_center_label.grid(row=1, column=0, sticky="ew")
+            self._mw.meas_cw_field_center_entry = ttk.Entry(frame)
+            self._mw.meas_cw_field_center_entry.grid(row=1, column=1, sticky="ew")
+            self._mw.meas_cw_field_width_label = ttk.Label(frame,
+                                                text="Sweep Width (G)")
+            self._mw.meas_cw_field_width_label.grid(row=1, column=2, sticky="ew")
+            self._mw.meas_cw_field_width_entry = ttk.Entry(frame)
+            self._mw.meas_cw_field_width_entry.grid(row=1, column=3, sticky="ew")
+            self._mw.meas_cw_field_npoints_label = ttk.Label(frame,
+                                                    text="Field Points")
+            self._mw.meas_cw_field_npoints_label.grid(row=1, column=4, sticky="ew")
+            self._mw.meas_cw_field_npoints_entry = ttk.Entry(frame)
+            self._mw.meas_cw_field_npoints_entry.grid(row=1, column=5, sticky="ew")
+
+            self._mw.meas_cw_mw_atten_label = ttk.Label(frame,
+                                            text="Microwave Attenuation (dB)")
+            self._mw.meas_cw_mw_atten_label.grid(row=0, column=6, sticky="ew")
+            self._mw.meas_cw_mw_atten_entry = ttk.Entry(frame)
+            self._mw.meas_cw_mw_atten_entry.grid(row=0, column=7, sticky="ew")
+            self._mw.meas_cw_mw_power_label = ttk.Label(
+                frame,
+                text="Microwave Power (mW)"
+            )
+            self._mw.meas_cw_mw_power_label.grid(row=1, column=6, sticky="ew")
+            self._mw.meas_cw_mw_power_entry = ttk.Entry(
+                frame,
+                state="readonly"
+            )
+            self._mw.meas_cw_mw_power_entry.grid(row=1, column=7, sticky="ew")
+            self._mw.meas_cw_mod_freq_label = ttk.Label(frame,
+                                            text="Modulation Frequency (kHz)")
+            self._mw.meas_cw_mod_freq_label.grid(row=0, column=8, sticky="ew")
+            self._mw.meas_cw_mod_freq_entry = ttk.Entry(frame)
+            self._mw.meas_cw_mod_freq_entry.grid(row=0, column=9, sticky="ew")
+            self._mw.meas_cw_mod_amp_label = ttk.Label(frame,
+                                            text="Modulation Amplitude (G)")
+            self._mw.meas_cw_mod_amp_label.grid(row=0, column=10, sticky="ew")
+            self._mw.meas_cw_mod_amp_entry = ttk.Entry(frame)
+            self._mw.meas_cw_mod_amp_entry.grid(row=0, column=11, sticky="ew")
+            self._mw.meas_cw_mod_phase_label = ttk.Label(frame,
+                                                text="Modulation phase (degrees)")
+            self._mw.meas_cw_mod_phase_label.grid(row=1, column=8, sticky="ew")
+            self._mw.meas_cw_mod_phase_entry = ttk.Entry(frame)
+            self._mw.meas_cw_mod_phase_entry.grid(row=1, column=9, sticky="ew")
+            self._mw.meas_cw_harmonic_label = ttk.Label(frame,
+                                            text="Harmonic")
+            self._mw.meas_cw_harmonic_label.grid(row=1, column=10, sticky="ew")
+            self._mw.meas_cw_harmonic_entry = ttk.Entry(frame)
+            self._mw.meas_cw_harmonic_entry.grid(row=1, column=11, sticky="ew")
+            
+            self._mw.meas_cw_receiver_gain_label = ttk.Label(frame,
+                                                    text="Receiver Gain (dB)")
+            self._mw.meas_cw_receiver_gain_label.grid(row=0, column=12, sticky="ew")
+            self._mw.meas_cw_receiver_gain_entry = ttk.Entry(frame)
+            self._mw.meas_cw_receiver_gain_entry.grid(row=0, column=13, sticky="ew")
+            self._mw.meas_cw_conv_time_label = ttk.Label(frame,
+                                                text="Conversion time (ms)")
+            self._mw.meas_cw_conv_time_label.grid(row=0, column=14, sticky="ew")
+            self._mw.meas_cw_conv_time_entry = ttk.Entry(frame)
+            self._mw.meas_cw_conv_time_entry.grid(row=0, column=15, sticky="ew")
+            self._mw.meas_cw_offset_label = ttk.Label(frame,
+                                            text="Offset (%)")
+            self._mw.meas_cw_offset_label.grid(row=1, column=12, sticky="ew")
+            self._mw.meas_cw_offset_entry = ttk.Entry(frame)
+            self._mw.meas_cw_offset_entry.grid(row=1, column=13, sticky="ew")
+            self._mw.meas_cw_sweep_time_label = ttk.Label(frame,
+                                                text="Sweep Time (s)")
+            self._mw.meas_cw_sweep_time_label.grid(row=1, column=14, sticky="ew")
+            self._mw.meas_cw_sweep_time_entry = ttk.Entry(frame,
+                                                state="readonly")
+            self._mw.meas_cw_sweep_time_entry.grid(row=1, column=15, sticky="ew")
+
+            # Set minsize of entry widgets
+            widgets = frame.winfo_children()
+            for widget in widgets:
+                if '!entry' in widget.winfo_name():
+                    widget.config(justify="center", width=10)
+
+        elif exp_type == "Transient":
+            # Transient
+            self._mw.meas_tr_field_start_label = ttk.Label(
+                frame,
+                text="Start Field (G)"
+            )
+            self._mw.meas_tr_field_start_label.grid(
+                row=0,
+                column=0,
+                sticky="ew"
+            )
+            self._mw.meas_tr_field_start_entry = ttk.Entry(frame)
+            self._mw.meas_tr_field_start_entry.grid(row=0, column=1, sticky="ew")
+            self._mw.meas_tr_field_stop_label = ttk.Label(
+                frame, text="Stop Field (G)")
+            self._mw.meas_tr_field_stop_label.grid(row=0, column=2, sticky="ew")
+            self._mw.meas_tr_field_stop_entry = ttk.Entry(frame)
+            self._mw.meas_tr_field_stop_entry.grid(row=0, column=3, sticky="ew")
+            self._mw.meas_tr_field_step_label = ttk.Label(frame,
+                                                text="Step Field (G)")
+            self._mw.meas_tr_field_step_label.grid(row=0, column=4, sticky="ew")
+            self._mw.meas_tr_field_step_entry = ttk.Entry(frame)
+            self._mw.meas_tr_field_step_entry.grid(row=0, column=5, sticky="ew")
+            self._mw.meas_tr_field_center_label = ttk.Label(frame,
+                                                text="Center Field (G)")
+            self._mw.meas_tr_field_center_label.grid(row=1, column=0, sticky="ew")
+            self._mw.meas_tr_field_center_entry = ttk.Entry(frame)
+            self._mw.meas_tr_field_center_entry.grid(row=1, column=1, sticky="ew")
+            self._mw.meas_tr_field_width_label = ttk.Label(frame,
+                                                text="Sweep Width (G)")
+            self._mw.meas_tr_field_width_label.grid(row=1, column=2, sticky="ew")
+            self._mw.meas_tr_field_width_entry = ttk.Entry(frame)
+            self._mw.meas_tr_field_width_entry.grid(row=1, column=3, sticky="ew")
+            self._mw.meas_tr_field_npoints_label = ttk.Label(frame,
+                                                    text="Field Points")
+            self._mw.meas_tr_field_npoints_label.grid(row=1, column=4, sticky="ew")
+            self._mw.meas_tr_field_npoints_entry = ttk.Entry(frame)
+            self._mw.meas_tr_field_npoints_entry.grid(row=1, column=5, sticky="ew")
+
+            self._mw.meas_tr_mw_atten_label = ttk.Label(
+                frame,
+                text="Microwave Attenuation (dB)"
+            )
+            self._mw.meas_tr_mw_atten_label.grid(row=0, column=6, sticky="ew")
+            self._mw.meas_tr_mw_atten_entry = ttk.Entry(
+                frame
+            )
+            self._mw.meas_tr_mw_atten_entry.grid(row=0, column=7, sticky="ew")
+            self._mw.meas_tr_mw_power_label = ttk.Label(
+                frame,
+                text="Microwave Power (mW)"
+            )
+            self._mw.meas_tr_mw_power_label.grid(row=1, column=6, sticky="ew")
+            self._mw.meas_tr_mw_power_entry = ttk.Entry(
+                frame,
+                state="readonly"
+            )
+            self._mw.meas_tr_mw_power_entry.grid(row=1, column=7, sticky="ew")
+
+            # Set minsize of entry widgets
+            widgets = frame.winfo_children()
+            for widget in widgets:
+                if '!entry' in widget.winfo_name():
+                    widget.config(justify="center", width=10)
+        self._mw.win.update()
 
 
     def mw_close_xepr_api(self):
