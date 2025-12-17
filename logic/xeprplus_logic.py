@@ -369,68 +369,54 @@ class XeprPlusLogic():
         self.xepr.XeprExperiment(exp_name).aqExpActivate()
     
     
-    def set_cw_center_field(self, center_field):
-        args = [self.exp_names[0], '*fieldCtrl.CenterField', center_field]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-
-
-    def set_cw_conv_time(self, conv_time):
-        args = [self.exp_names[0], '*signalChannel.ConvTime', conv_time]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-
-
-    def set_cw_harmonic(self, harmonic):
-        args = [self.exp_names[0], '*signalChannel.Harmonic', harmonic]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-
-
-    def set_cw_mod_amplitude(self, mod_amp):
-        args = [self.exp_names[0], '*signalChannel.ModAmp', mod_amp]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-
-
-    def set_cw_mod_frequency(self, mod_freq):
-        args = [self.exp_names[0], '*signalChannel.ModFreq', mod_freq]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-
-
-    def set_cw_mod_phase(self, mod_phase):
-        args = [self.exp_names[0], '*signalChannel.ModPhase', mod_phase]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-
-
-    def set_cw_mw_power_attenuation(self, attenuation):
-        args = [self.exp_names[0], '*mwBridge.PowerAtten', attenuation]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-
-
-    def set_cw_offset(self, offset):
-        args = [self.exp_names[0], '*signalChannel.Offset', offset]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-
-
-    def set_cw_receiver_gain(self, gain):
-        args = [self.exp_names[0], '*mwBridge.Gain', gain]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-
-
-    def set_cw_resolution(self, resolution):
-        args = [self.exp_names[0], '*signalChannel.Resolution', resolution]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-
-
-    def set_cw_sweep_time(self, sweep_time):
-        args = [self.exp_names[0], '*signalChannel.SweepTime', sweep_time]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-
-
-    def set_cw_sweep_width(self, sweep_width):
-        args = [self.exp_names[0], '*fieldCtrl.SweepWidth', center_field]
-        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
-    
-    
+    def set_cw_params(self, **kwargs):
+        """Set cw EPR experimental parameters."""
+        # TODO add check for input parameters
+        param_map = {
+            'center_field': '*fieldCtrl.CenterField',
+            'sweep_field': '*fieldCtrl.SweepWidth', 
+            'n_field_points': '*signalChannel.Resolution',
+            'mod_freq': '*signalChannel.ModFreq',
+            'mod_amp': '*signalChannel.ModAmp',
+            'mod_phase': '*signalChannel.ModPhase',
+            'harmonic': '*signalChannel.Harmonic',
+            'mw_power_attenuation': '*mwBridge.PowerAttenuation',
+            'conv_time': '*signalChannel.ConvTime',
+            'sweep_time': '*signalChannel.SweepTime',
+            'receiver_gain': '*mwBridge.Gain',
+            'offset': '*signalChannel.Offset'
+        }
+        
+        for param_name, value in kwargs.items():
+            if value is not None and param_name in param_map:
+                args = [self.exp_names[0], param_map[param_name], value]
+                self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
         
 
-    def set_temperature(self, t):
-        self.xepr.XeprCmds.aqParSet('AcqHidden', '*gTempCtrl.Temperature', t)
+    def set_temperature(self, temperature):
+        args = ['AcqHidden', '*gTempCtrl.Temperature', temperature]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_tr_params(self, **kwargs):
+        """Set transient EPR experimental parameters."""
+        # TODO add check for input parameters
+        param_map = {
+            'field_center': '*fieldCtrl.CenterField',
+            'field_sweep': '*fieldCtrl.SweepWidth', 
+            'field_npoints': '*signalChannel.Resolution',
+            'mod_freq': '*signalChannel.ModFreq',
+            'mod_amp': '*signalChannel.ModAmp',
+            'mod_phase': '*signalChannel.ModPhase',
+            'harmonic': '*signalChannel.Harmonic',
+            'mw_atten': '*mwBridge.PowerAttenuation',
+            'conv_time': '*signalChannel.ConvTime',
+            'sweep_time': '*signalChannel.SweepTime',
+            'receiver_gain': '*mwBridge.Gain',
+            'offset': '*signalChannel.Offset'
+        }
         
+        for param_name, value in kwargs.items():
+            if value is not None and param_name in param_map:
+                args = [self.exp_names[0], param_map[param_name], value]
+                self._command_wait(self.xepr.XeprCmds.aqParSet, *args)  

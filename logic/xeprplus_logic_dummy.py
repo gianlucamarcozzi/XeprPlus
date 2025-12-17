@@ -222,6 +222,10 @@ class XeprPlusLogic():
         print("save_meas")
 
 
+    def send_to_spectrometer(self, exp):
+        print("Send to spectrometer:", exp)
+
+
 class DatasetXepr():
 
     def __init__(self):
