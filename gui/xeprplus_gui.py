@@ -405,98 +405,100 @@ class XeprPlusGui():
         for widget in frame.winfo_children():
             widget.destroy()  # deleting widget
 
-        exp_type = self._mw.meas_exp_select_combobox.get()
+        exp_type = self._mw.exp_select_combobox.get()
         if exp_type == "Continuous Wave":
             # cw
-            self._mw.meas_cw_field_start_label = ttk.Label(
+            self._mw.cw_field_start_label = ttk.Label(
             frame, text="Start Field (G)"
             )
-            self._mw.meas_cw_field_start_label.grid(row=0, column=0, sticky="ew")
-            self._mw.meas_cw_field_start_entry = ttk.Entry(frame)
-            self._mw.meas_cw_field_start_entry.grid(row=0, column=1, sticky="ew")
-            self._mw.meas_cw_field_stop_label = ttk.Label(
-                frame, text="Stop Field (G)")
-            self._mw.meas_cw_field_stop_label.grid(row=0, column=2, sticky="ew")
-            self._mw.meas_cw_field_stop_entry = ttk.Entry(frame)
-            self._mw.meas_cw_field_stop_entry.grid(row=0, column=3, sticky="ew")
-            self._mw.meas_cw_field_step_label = ttk.Label(frame,
+            self._mw.cw_field_start_label.grid(row=0, column=0, sticky="ew")
+            self._mw.cw_field_start_entry = ttk.Entry(frame)
+            self._mw.cw_field_start_entry.grid(row=0, column=1, sticky="ew")
+            self._mw.cw_field_stop_label = ttk.Label(
+                frame,
+                text="Stop Field (G)"
+            )
+            self._mw.cw_field_stop_label.grid(row=0, column=2, sticky="ew")
+            self._mw.cw_field_stop_entry = ttk.Entry(frame)
+            self._mw.cw_field_stop_entry.grid(row=0, column=3, sticky="ew")
+            self._mw.cw_field_step_label = ttk.Label(frame,
                                                 text="Step Field (G)")
-            self._mw.meas_cw_field_step_label.grid(row=0, column=4, sticky="ew")
-            self._mw.meas_cw_field_step_entry = ttk.Entry(frame)
-            self._mw.meas_cw_field_step_entry.grid(row=0, column=5, sticky="ew")
-            self._mw.meas_cw_field_center_label = ttk.Label(frame,
+            self._mw.cw_field_step_label.grid(row=0, column=4, sticky="ew")
+            self._mw.cw_field_step_entry = ttk.Entry(frame)
+            self._mw.cw_field_step_entry.grid(row=0, column=5, sticky="ew")
+            self._mw.cw_field_center_label = ttk.Label(frame,
                                                 text="Center Field (G)")
-            self._mw.meas_cw_field_center_label.grid(row=1, column=0, sticky="ew")
-            self._mw.meas_cw_field_center_entry = ttk.Entry(frame)
-            self._mw.meas_cw_field_center_entry.grid(row=1, column=1, sticky="ew")
-            self._mw.meas_cw_field_width_label = ttk.Label(frame,
+            self._mw.cw_field_center_label.grid(row=1, column=0, sticky="ew")
+            self._mw.cw_field_center_entry = ttk.Entry(frame)
+            self._mw.cw_field_center_entry.grid(row=1, column=1, sticky="ew")
+            self._mw.cw_field_width_label = ttk.Label(frame,
                                                 text="Sweep Width (G)")
-            self._mw.meas_cw_field_width_label.grid(row=1, column=2, sticky="ew")
-            self._mw.meas_cw_field_width_entry = ttk.Entry(frame)
-            self._mw.meas_cw_field_width_entry.grid(row=1, column=3, sticky="ew")
-            self._mw.meas_cw_field_npoints_label = ttk.Label(frame,
+            self._mw.cw_field_width_label.grid(row=1, column=2, sticky="ew")
+            self._mw.cw_field_width_entry = ttk.Entry(frame)
+            self._mw.cw_field_width_entry.grid(row=1, column=3, sticky="ew")
+            self._mw.cw_field_npoints_label = ttk.Label(frame,
                                                     text="Field Points")
-            self._mw.meas_cw_field_npoints_label.grid(row=1, column=4, sticky="ew")
-            self._mw.meas_cw_field_npoints_entry = ttk.Entry(frame)
-            self._mw.meas_cw_field_npoints_entry.grid(row=1, column=5, sticky="ew")
+            self._mw.cw_field_npoints_label.grid(row=1, column=4, sticky="ew")
+            self._mw.cw_field_npoints_entry = ttk.Entry(frame)
+            self._mw.cw_field_npoints_entry.grid(row=1, column=5, sticky="ew")
 
-            self._mw.meas_cw_mw_atten_label = ttk.Label(frame,
+            self._mw.cw_mw_atten_label = ttk.Label(frame,
                                             text="Microwave Attenuation (dB)")
-            self._mw.meas_cw_mw_atten_label.grid(row=0, column=6, sticky="ew")
-            self._mw.meas_cw_mw_atten_entry = ttk.Entry(frame)
-            self._mw.meas_cw_mw_atten_entry.grid(row=0, column=7, sticky="ew")
-            self._mw.meas_cw_mw_power_label = ttk.Label(
+            self._mw.cw_mw_atten_label.grid(row=0, column=6, sticky="ew")
+            self._mw.cw_mw_atten_entry = ttk.Entry(frame)
+            self._mw.cw_mw_atten_entry.grid(row=0, column=7, sticky="ew")
+            self._mw.cw_mw_power_label = ttk.Label(
                 frame,
                 text="Microwave Power (mW)"
             )
-            self._mw.meas_cw_mw_power_label.grid(row=1, column=6, sticky="ew")
-            self._mw.meas_cw_mw_power_entry = ttk.Entry(
+            self._mw.cw_mw_power_label.grid(row=1, column=6, sticky="ew")
+            self._mw.cw_mw_power_entry = ttk.Entry(
                 frame,
                 state="readonly"
             )
-            self._mw.meas_cw_mw_power_entry.grid(row=1, column=7, sticky="ew")
-            self._mw.meas_cw_mod_freq_label = ttk.Label(frame,
+            self._mw.cw_mw_power_entry.grid(row=1, column=7, sticky="ew")
+            self._mw.cw_mod_freq_label = ttk.Label(frame,
                                             text="Modulation Frequency (kHz)")
-            self._mw.meas_cw_mod_freq_label.grid(row=0, column=8, sticky="ew")
-            self._mw.meas_cw_mod_freq_entry = ttk.Entry(frame)
-            self._mw.meas_cw_mod_freq_entry.grid(row=0, column=9, sticky="ew")
-            self._mw.meas_cw_mod_amp_label = ttk.Label(frame,
+            self._mw.cw_mod_freq_label.grid(row=0, column=8, sticky="ew")
+            self._mw.cw_mod_freq_entry = ttk.Entry(frame)
+            self._mw.cw_mod_freq_entry.grid(row=0, column=9, sticky="ew")
+            self._mw.cw_mod_amp_label = ttk.Label(frame,
                                             text="Modulation Amplitude (G)")
-            self._mw.meas_cw_mod_amp_label.grid(row=0, column=10, sticky="ew")
-            self._mw.meas_cw_mod_amp_entry = ttk.Entry(frame)
-            self._mw.meas_cw_mod_amp_entry.grid(row=0, column=11, sticky="ew")
-            self._mw.meas_cw_mod_phase_label = ttk.Label(frame,
+            self._mw.cw_mod_amp_label.grid(row=0, column=10, sticky="ew")
+            self._mw.cw_mod_amp_entry = ttk.Entry(frame)
+            self._mw.cw_mod_amp_entry.grid(row=0, column=11, sticky="ew")
+            self._mw.cw_mod_phase_label = ttk.Label(frame,
                                                 text="Modulation phase (degrees)")
-            self._mw.meas_cw_mod_phase_label.grid(row=1, column=8, sticky="ew")
-            self._mw.meas_cw_mod_phase_entry = ttk.Entry(frame)
-            self._mw.meas_cw_mod_phase_entry.grid(row=1, column=9, sticky="ew")
-            self._mw.meas_cw_harmonic_label = ttk.Label(frame,
+            self._mw.cw_mod_phase_label.grid(row=1, column=8, sticky="ew")
+            self._mw.cw_mod_phase_entry = ttk.Entry(frame)
+            self._mw.cw_mod_phase_entry.grid(row=1, column=9, sticky="ew")
+            self._mw.cw_harmonic_label = ttk.Label(frame,
                                             text="Harmonic")
-            self._mw.meas_cw_harmonic_label.grid(row=1, column=10, sticky="ew")
-            self._mw.meas_cw_harmonic_entry = ttk.Entry(frame)
-            self._mw.meas_cw_harmonic_entry.grid(row=1, column=11, sticky="ew")
+            self._mw.cw_harmonic_label.grid(row=1, column=10, sticky="ew")
+            self._mw.cw_harmonic_entry = ttk.Entry(frame)
+            self._mw.cw_harmonic_entry.grid(row=1, column=11, sticky="ew")
             
-            self._mw.meas_cw_receiver_gain_label = ttk.Label(frame,
+            self._mw.cw_receiver_gain_label = ttk.Label(frame,
                                                     text="Receiver Gain (dB)")
-            self._mw.meas_cw_receiver_gain_label.grid(row=0, column=12, sticky="ew")
-            self._mw.meas_cw_receiver_gain_entry = ttk.Entry(frame)
-            self._mw.meas_cw_receiver_gain_entry.grid(row=0, column=13, sticky="ew")
-            self._mw.meas_cw_conv_time_label = ttk.Label(frame,
+            self._mw.cw_receiver_gain_label.grid(row=0, column=12, sticky="ew")
+            self._mw.cw_receiver_gain_entry = ttk.Entry(frame)
+            self._mw.cw_receiver_gain_entry.grid(row=0, column=13, sticky="ew")
+            self._mw.cw_conv_time_label = ttk.Label(frame,
                                                 text="Conversion time (ms)")
-            self._mw.meas_cw_conv_time_label.grid(row=0, column=14, sticky="ew")
-            self._mw.meas_cw_conv_time_entry = ttk.Entry(frame)
-            self._mw.meas_cw_conv_time_entry.grid(row=0, column=15, sticky="ew")
-            self._mw.meas_cw_offset_label = ttk.Label(frame,
+            self._mw.cw_conv_time_label.grid(row=0, column=14, sticky="ew")
+            self._mw.cw_conv_time_entry = ttk.Entry(frame)
+            self._mw.cw_conv_time_entry.grid(row=0, column=15, sticky="ew")
+            self._mw.cw_offset_label = ttk.Label(frame,
                                             text="Offset (%)")
-            self._mw.meas_cw_offset_label.grid(row=1, column=12, sticky="ew")
-            self._mw.meas_cw_offset_entry = ttk.Entry(frame)
-            self._mw.meas_cw_offset_entry.grid(row=1, column=13, sticky="ew")
-            self._mw.meas_cw_sweep_time_label = ttk.Label(frame,
+            self._mw.cw_offset_label.grid(row=1, column=12, sticky="ew")
+            self._mw.cw_offset_entry = ttk.Entry(frame)
+            self._mw.cw_offset_entry.grid(row=1, column=13, sticky="ew")
+            self._mw.cw_sweep_time_label = ttk.Label(frame,
                                                 text="Sweep Time (s)")
-            self._mw.meas_cw_sweep_time_label.grid(row=1, column=14, sticky="ew")
-            self._mw.meas_cw_sweep_time_entry = ttk.Entry(frame,
+            self._mw.cw_sweep_time_label.grid(row=1, column=14, sticky="ew")
+            self._mw.cw_sweep_time_entry = ttk.Entry(frame,
                                                 state="readonly")
-            self._mw.meas_cw_sweep_time_entry.grid(row=1, column=15, sticky="ew")
+            self._mw.cw_sweep_time_entry.grid(row=1, column=15, sticky="ew")
 
             # Set minsize of entry widgets
             widgets = frame.winfo_children()
@@ -506,62 +508,62 @@ class XeprPlusGui():
 
         elif exp_type == "Transient":
             # Transient
-            self._mw.meas_tr_field_start_label = ttk.Label(
+            self._mw.tr_field_start_label = ttk.Label(
                 frame,
                 text="Start Field (G)"
             )
-            self._mw.meas_tr_field_start_label.grid(
+            self._mw.tr_field_start_label.grid(
                 row=0,
                 column=0,
                 sticky="ew"
             )
-            self._mw.meas_tr_field_start_entry = ttk.Entry(frame)
-            self._mw.meas_tr_field_start_entry.grid(row=0, column=1, sticky="ew")
-            self._mw.meas_tr_field_stop_label = ttk.Label(
+            self._mw.tr_field_start_entry = ttk.Entry(frame)
+            self._mw.tr_field_start_entry.grid(row=0, column=1, sticky="ew")
+            self._mw.tr_field_stop_label = ttk.Label(
                 frame, text="Stop Field (G)")
-            self._mw.meas_tr_field_stop_label.grid(row=0, column=2, sticky="ew")
-            self._mw.meas_tr_field_stop_entry = ttk.Entry(frame)
-            self._mw.meas_tr_field_stop_entry.grid(row=0, column=3, sticky="ew")
-            self._mw.meas_tr_field_step_label = ttk.Label(frame,
+            self._mw.tr_field_stop_label.grid(row=0, column=2, sticky="ew")
+            self._mw.tr_field_stop_entry = ttk.Entry(frame)
+            self._mw.tr_field_stop_entry.grid(row=0, column=3, sticky="ew")
+            self._mw.tr_field_step_label = ttk.Label(frame,
                                                 text="Step Field (G)")
-            self._mw.meas_tr_field_step_label.grid(row=0, column=4, sticky="ew")
-            self._mw.meas_tr_field_step_entry = ttk.Entry(frame)
-            self._mw.meas_tr_field_step_entry.grid(row=0, column=5, sticky="ew")
-            self._mw.meas_tr_field_center_label = ttk.Label(frame,
+            self._mw.tr_field_step_label.grid(row=0, column=4, sticky="ew")
+            self._mw.tr_field_step_entry = ttk.Entry(frame)
+            self._mw.tr_field_step_entry.grid(row=0, column=5, sticky="ew")
+            self._mw.tr_field_center_label = ttk.Label(frame,
                                                 text="Center Field (G)")
-            self._mw.meas_tr_field_center_label.grid(row=1, column=0, sticky="ew")
-            self._mw.meas_tr_field_center_entry = ttk.Entry(frame)
-            self._mw.meas_tr_field_center_entry.grid(row=1, column=1, sticky="ew")
-            self._mw.meas_tr_field_width_label = ttk.Label(frame,
+            self._mw.tr_field_center_label.grid(row=1, column=0, sticky="ew")
+            self._mw.tr_field_center_entry = ttk.Entry(frame)
+            self._mw.tr_field_center_entry.grid(row=1, column=1, sticky="ew")
+            self._mw.tr_field_width_label = ttk.Label(frame,
                                                 text="Sweep Width (G)")
-            self._mw.meas_tr_field_width_label.grid(row=1, column=2, sticky="ew")
-            self._mw.meas_tr_field_width_entry = ttk.Entry(frame)
-            self._mw.meas_tr_field_width_entry.grid(row=1, column=3, sticky="ew")
-            self._mw.meas_tr_field_npoints_label = ttk.Label(frame,
+            self._mw.tr_field_width_label.grid(row=1, column=2, sticky="ew")
+            self._mw.tr_field_width_entry = ttk.Entry(frame)
+            self._mw.tr_field_width_entry.grid(row=1, column=3, sticky="ew")
+            self._mw.tr_field_npoints_label = ttk.Label(frame,
                                                     text="Field Points")
-            self._mw.meas_tr_field_npoints_label.grid(row=1, column=4, sticky="ew")
-            self._mw.meas_tr_field_npoints_entry = ttk.Entry(frame)
-            self._mw.meas_tr_field_npoints_entry.grid(row=1, column=5, sticky="ew")
+            self._mw.tr_field_npoints_label.grid(row=1, column=4, sticky="ew")
+            self._mw.tr_field_npoints_entry = ttk.Entry(frame)
+            self._mw.tr_field_npoints_entry.grid(row=1, column=5, sticky="ew")
 
-            self._mw.meas_tr_mw_atten_label = ttk.Label(
+            self._mw.tr_mw_atten_label = ttk.Label(
                 frame,
                 text="Microwave Attenuation (dB)"
             )
-            self._mw.meas_tr_mw_atten_label.grid(row=0, column=6, sticky="ew")
-            self._mw.meas_tr_mw_atten_entry = ttk.Entry(
+            self._mw.tr_mw_atten_label.grid(row=0, column=6, sticky="ew")
+            self._mw.tr_mw_atten_entry = ttk.Entry(
                 frame
             )
-            self._mw.meas_tr_mw_atten_entry.grid(row=0, column=7, sticky="ew")
-            self._mw.meas_tr_mw_power_label = ttk.Label(
+            self._mw.tr_mw_atten_entry.grid(row=0, column=7, sticky="ew")
+            self._mw.tr_mw_power_label = ttk.Label(
                 frame,
                 text="Microwave Power (mW)"
             )
-            self._mw.meas_tr_mw_power_label.grid(row=1, column=6, sticky="ew")
-            self._mw.meas_tr_mw_power_entry = ttk.Entry(
+            self._mw.tr_mw_power_label.grid(row=1, column=6, sticky="ew")
+            self._mw.tr_mw_power_entry = ttk.Entry(
                 frame,
                 state="readonly"
             )
-            self._mw.meas_tr_mw_power_entry.grid(row=1, column=7, sticky="ew")
+            self._mw.tr_mw_power_entry.grid(row=1, column=7, sticky="ew")
 
             # Set minsize of entry widgets
             widgets = frame.winfo_children()
