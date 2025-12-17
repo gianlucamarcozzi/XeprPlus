@@ -87,14 +87,14 @@ class XeprPlusMainWindow():
         self.exp_select_combobox = ttk.Combobox(
             self.run_frame,
             textvariable="",
-            values=["Continuous Wave", "Transient", "Pulse"]
+            values=["CW", "Transient", "Pulse"]
         )
         self.exp_select_combobox.grid(row=0, column=0, sticky="ew")
-        self.send_to_spectr_button = tk.Button(
+        self.send_to_spectrometer_button = tk.Button(
             self.run_frame,
             text="Send to spectrometer"
         )
-        self.send_to_spectr_button.grid(row=0, column=1, sticky="ew")     
+        self.send_to_spectrometer_button.grid(row=0, column=1, sticky="ew")     
         self.run_button = tk.Button(
             self.run_frame,
             text="Run"
@@ -276,12 +276,12 @@ class XeprPlusGui():
         self._mw.options_menu.entryconfig(1, command=self.close_xepr_api)
 
         # Buttons
-        self._mw.send_to_spectr_button.config(
-            command=self.send_to_spectr_button_clicked
+        self._mw.send_to_spectrometer_button.config(
+            command=self.send_to_spectrometer_button_clicked
         )
 
         # Treeview dset_tree
-        self.dset_tree.bind("<Button-1>", self.dset_tree_clicked)
+        self._mw.dset_tree.bind("<Button-1>", self.dset_tree_clicked)
 
         # TODO add some if statement
         # Auto connect to XeprAPI at startup
@@ -399,14 +399,17 @@ class XeprPlusGui():
             self._daw.selected_colors.pop(i)
 
 
-    def send_to_spectr_button_clicked(self):
+    def send_to_spectrometer_button_clicked(self):
+        exp = self._mw.exp_select_combobox.get()
+        self._logic.send_to_spectrometer(exp)
+        
         frame = self._mw.meas_params_frame
         # Clear all widgets from the frame
         for widget in frame.winfo_children():
             widget.destroy()  # deleting widget
 
         exp_type = self._mw.exp_select_combobox.get()
-        if exp_type == "Continuous Wave":
+        if exp_type == "CW":
             # cw
             self._mw.cw_field_start_label = ttk.Label(
             frame, text="Start Field (G)"

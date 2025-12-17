@@ -182,24 +182,42 @@ class XeprPlusLogic():
         return datacorr, baseline
     
 
-    def create_new_experiment(self, exp_type):
-        if exp_type == 0:
-            self.exp_names.append(self._check_exp_name('cwEPR'))
-            params = [self.exp_names[-1], 'C.W.', 'Field', 'None', 
-                      "'Signal channel'", 'Off', 'Off', 'On']
-        elif exp_type == 1:
-            self.exp_names.append(self._check_exp_name('trEPR'))
-            params = [self.exp_names[-1], 'C.W.', 'Time', 'Field', 
-                      "'Transient recorder'", 'Off', 'Off', 'On']
-        elif exp_type == 2:
-            self.exp_names.append(self._check_exp_name('pEPR'))
-            params = [self.exp_names[-1], 'Pulse', 'Field', 'None', 
-                      "'Transient recorder'", 'Off', 'Off', 'On']
-        else:
-            raise Exception("exp_type must be a number between 0 and 2.")
+    def create_new_experiment(self, exp_name):
+        if exp_name == "CW":
+            params = [
+                exp_name,
+                'C.W.',
+                'Field',
+                'None',
+                "'Signal channel'",
+                'Off',
+                'Off',
+                'Off'
+            ]
+        elif exp_name == "Transient":
+            params = [
+                exp_name,
+                'C.W.',
+                'Time',
+                'Field',
+                "'Transient recorder'",
+                'Off',
+                'Off',
+                'Off'
+            ]
+        elif exp_name == "Pulse":
+            params = [
+                exp_name,
+                'Pulse',
+                'Field',
+                'None',
+                "'Transient recorder'",
+                'Off',
+                'Off',
+                'Off'
+            ]
+            
         self._command_wait(self.xepr.XeprCmds.aqExpNew, params)
-        exp = self.xepr.XeprExperiment(self.exp_names[-1])
-        self.exps.append(exp)
         
 
     def get_dataset(self, xeprset='primary'):
@@ -338,6 +356,19 @@ class XeprPlusLogic():
         # Exp to primary window
         self.xepr.XeprCmds.aqExpSelect(1, exp.aqGetExpName())
 
+        
+    def send_to_spectrometer(self, exp_name):
+        try:
+            self.xepr.XeprExperiment(exp_name).aqExpActivate()
+            return 0
+        except XeprAPI.ExperimentError:
+            self.create_new_experiment(exp_name)
+            self.xepr.XeprExperiment(exp_name).aqExpActivate()
+            return 1
+    
+    
+    def set_cw_center_field(self, center_field):
+        self.XeprExperiment()["CenterField"].value()
         
     def set_temperature(self, t):
         self.xepr.XeprCmds.aqParSet('AcqHidden', '*gTempCtrl.Temperature', t)
