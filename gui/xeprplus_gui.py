@@ -376,22 +376,22 @@ class XeprPlusGui():
             command=self.send_to_spectrometer_button_clicked
         )
 
-        self._mw.cw_field_start_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_field_stop_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_field_step_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_field_center_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_field_width_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_field_npoints_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_mw_atten_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_mw_power_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_mod_freq_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_mod_amp_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_mod_phase_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_harmonic_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_receiver_gain_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_conv_time_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_offset_entry.bind("<Leave>", self.update_cw_params)
-        self._mw.cw_sweep_time_entry.bind("<Leave>", self.update_cw_params)
+        self._mw.cw_field_start_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_field_stop_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_field_step_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_field_center_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_field_width_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_field_npoints_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_mw_atten_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_mw_power_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_mod_freq_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_mod_amp_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_mod_phase_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_harmonic_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_receiver_gain_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_conv_time_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_offset_entry.bind("<Leave>", self.set_cw_params)
+        self._mw.cw_sweep_time_entry.bind("<Leave>", self.set_cw_params)
         self._mw.tr_field_start_entry.bind("<Leave>", self.update_tr_params)
         self._mw.tr_field_stop_entry.bind("<Leave>", self.update_tr_params)
         self._mw.tr_field_step_entry.bind("<Leave>", self.update_tr_params)
@@ -873,10 +873,11 @@ class XeprPlusGui():
             self._rmw.run_time_duration_m_entry.config(state="active")
 
 
-    def update_cw_params(self, event):
+    def set_cw_params(self, event):
+        print('a')
         value = event.widget.get()
         param = str(event.widget).split("cw_")[-1].split("_entr")[0]
-        self._logic.update_cw_params(**{param: value})
+        self._logic.set_cw_params(**{param: value})
 
     
     def update_tr_params(self, event):

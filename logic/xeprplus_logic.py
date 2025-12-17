@@ -386,9 +386,10 @@ class XeprPlusLogic():
             'receiver_gain': '*mwBridge.Gain',
             'offset': '*signalChannel.Offset'
         }
-        
+        print(kwargs.items())
         for param_name, value in kwargs.items():
             if value is not None and param_name in param_map:
+                print(param_name, param_map)
                 args = [self.exp_names[0], param_map[param_name], value]
                 self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
         
