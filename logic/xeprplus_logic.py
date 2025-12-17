@@ -14,8 +14,7 @@ class XeprPlusLogic():
 
     def __init__(self):
         self.xepr = None
-        self.exps = []
-        self.exp_names = []
+        self.exp_names = ["CW", "Transient", "Pulse"]
         self.stop_meas = 0
         return
 
@@ -183,7 +182,8 @@ class XeprPlusLogic():
     
 
     def create_new_experiment(self, exp_name):
-        if exp_name == "CW":
+        if exp_name == self.exp_names[0]:
+            # CW
             params = [
                 exp_name,
                 'C.W.',
@@ -194,7 +194,8 @@ class XeprPlusLogic():
                 'Off',
                 'Off'
             ]
-        elif exp_name == "Transient":
+        elif exp_name == self.exp_names[1]:
+            # Transient
             params = [
                 exp_name,
                 'C.W.',
@@ -205,7 +206,8 @@ class XeprPlusLogic():
                 'Off',
                 'Off'
             ]
-        elif exp_name == "Pulse":
+        elif exp_name == self.exp_names[2]:
+            # Pulse
             params = [
                 exp_name,
                 'Pulse',
@@ -233,7 +235,13 @@ class XeprPlusLogic():
     def open_xepr_api(self):
         try:
             self.xepr = XeprAPI.Xepr(verbose=False)
-            self.hidden_exp = self.xepr.XeprExperiment('AcqHidden')
+            for exp_name in self.exp_names:
+                try:
+                    # Check if experiment was already created
+                    exp = self.xepr.XeprExperiment(exp_name)
+                except XeprAPI.ExperimentError:
+                    # Create experiment
+                    self.create_new_experiment(exp_name)
             return 0
         except Exception as e:
             print(e)
@@ -358,18 +366,71 @@ class XeprPlusLogic():
 
         
     def send_to_spectrometer(self, exp_name):
-        try:
-            self.xepr.XeprExperiment(exp_name).aqExpActivate()
-            return 0
-        except XeprAPI.ExperimentError:
-            self.create_new_experiment(exp_name)
-            self.xepr.XeprExperiment(exp_name).aqExpActivate()
-            return 1
+        self.xepr.XeprExperiment(exp_name).aqExpActivate()
     
     
     def set_cw_center_field(self, center_field):
-        self.XeprExperiment()["CenterField"].value()
+        args = [self.exp_names[0], '*fieldCtrl.CenterField', center_field]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_cw_conv_time(self, conv_time):
+        args = [self.exp_names[0], '*signalChannel.ConvTime', conv_time]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_cw_harmonic(self, harmonic):
+        args = [self.exp_names[0], '*signalChannel.Harmonic', harmonic]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_cw_mod_amplitude(self, mod_amp):
+        args = [self.exp_names[0], '*signalChannel.ModAmp', mod_amp]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_cw_mod_frequency(self, mod_freq):
+        args = [self.exp_names[0], '*signalChannel.ModFreq', mod_freq]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_cw_mod_phase(self, mod_phase):
+        args = [self.exp_names[0], '*signalChannel.ModPhase', mod_phase]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_cw_mw_power_attenuation(self, attenuation):
+        args = [self.exp_names[0], '*mwBridge.PowerAtten', attenuation]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_cw_offset(self, offset):
+        args = [self.exp_names[0], '*signalChannel.Offset', offset]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_cw_receiver_gain(self, gain):
+        args = [self.exp_names[0], '*mwBridge.Gain', gain]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_cw_resolution(self, resolution):
+        args = [self.exp_names[0], '*signalChannel.Resolution', resolution]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_cw_sweep_time(self, sweep_time):
+        args = [self.exp_names[0], '*signalChannel.SweepTime', sweep_time]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+
+
+    def set_cw_sweep_width(self, sweep_width):
+        args = [self.exp_names[0], '*fieldCtrl.SweepWidth', center_field]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
+    
+    
         
+
     def set_temperature(self, t):
         self.xepr.XeprCmds.aqParSet('AcqHidden', '*gTempCtrl.Temperature', t)
         
