@@ -12,9 +12,57 @@ class XeprPlusLogic():
 
     def __init__(self):
         self.xepr = None
-        self.exps = []
-        self.exp_names = []
+        self.exp_names = ["CW", "Transient", "Pulse"]
         self.stop_meas = 0
+
+        # Default variables
+        self.cw_field_start = 3300.
+        self.cw_field_stop = 3400.
+        self.cw_field_step = 1.
+        self.cw_field_center = 335.0
+        self.cw_field_sweep = 1000.
+        self.cw_field_npoints = 1001
+        self.cw_mw_atten = 60
+        self.cw_mw_power = 200e-6
+        self.cw_mod_freq = 100
+        self.cw_mod_amp = 1.
+        self.cw_mod_phase = 0
+        self.cw_harmonic = 1
+        self.cw_receiver_gain = 60.
+        self.cw_offset = 0.
+        self.cw_conv_time = 5.12  # ms
+        self.cw_sweep_time = 5.12 * self.cw_field_npoints / 1000  # s
+        self.tr_field_start = 3300.
+        self.tr_field_stop = 3400.
+        self.tr_field_step = 10.
+        self.tr_field_center = 3350.
+        self.tr_field_sweep = 1000.
+        self.tr_field_npoints = 1001
+        self.tr_mw_atten = 60.
+        self.tr_mw_power = 200e-6
+
+        # Dictionaries with mapping between XeprPlus and Xepr parameters 
+        cw_param_map = {
+            'field_center': '*fieldCtrl.CenterField',
+            'field_sweep': '*fieldCtrl.SweepWidth', 
+            'field_npoints': '*signalChannel.Resolution',
+            'mod_freq': '*signalChannel.ModFreq',
+            'mod_amp': '*signalChannel.ModAmp',
+            'mod_phase': '*signalChannel.ModPhase',
+            'harmonic': '*signalChannel.Harmonic',
+            'mw_atten': '*mwBridge.PowerAttenuation',
+            'conv_time': '*signalChannel.ConvTime',
+            'sweep_time': '*signalChannel.SweepTime',
+            'receiver_gain': '*mwBridge.Gain',
+            'offset': '*signalChannel.Offset'
+        }
+
+        tr_param_map = {
+            'field_center': '*fieldCtrl.CenterField',
+            'field_sweep': '*fieldCtrl.SweepWidth', 
+            'field_npoints': '*signalChannel.Resolution',
+            'mw_atten': '*mwBridge.PowerAttenuation',
+        }
         return
 
     def _check_exp_name(self, exp_name):
@@ -151,22 +199,44 @@ class XeprPlusLogic():
 
 
     def create_new_experiment(self, exp_type):
-        if exp_type == 0:
-            self.exp_names.append(self._check_exp_name('cwEPR'))
-            params = [self.exp_names[-1], 'C.W.', 'Field', 'None', 
-                      "'Signal channel'", 'Off', 'Off', 'On']
-        elif exp_type == 1:
-            self.exp_names.append(self._check_exp_name('trEPR'))
-            params = [self.exp_names[-1], 'C.W.', 'Time', 'Field', 
-                      "'Transient recorder'", 'Off', 'Off', 'On']
-        elif exp_type == 2:
-            self.exp_names.append(self._check_exp_name('pEPR'))
-            params = [self.exp_names[-1], 'Pulse', 'Field', 'None', 
-                      "'Transient recorder'", 'Off', 'Off', 'On']
-        else:
-            raise Exception("exp_type must be a number between 0 and 2.")
+        if exp_name == self.exp_names[0]:
+            # CW
+            params = [
+                exp_name,
+                'C.W.',
+                'Field',
+                'None',
+                "'Signal channel'",
+                'Off',
+                'Off',
+                'Off'
+            ]
+        elif exp_name == self.exp_names[1]:
+            # Transient
+            params = [
+                exp_name,
+                'C.W.',
+                'Time',
+                'Field',
+                "'Transient recorder'",
+                'Off',
+                'Off',
+                'Off'
+            ]
+        elif exp_name == self.exp_names[2]:
+            # Pulse
+            params = [
+                exp_name,
+                'Pulse',
+                'Field',
+                'None',
+                "'Transient recorder'",
+                'Off',
+                'Off',
+                'Off'
+            ]
         print("Create new experiment.")
-        self.exps.append(params)
+        # self.exps.append(params)
 
 
     def get_dataset(self, xeprset='primary'):
@@ -175,8 +245,54 @@ class XeprPlusLogic():
         return dset
 
 
+    def get_field_start_stop_step(
+        self, mode, field_center, field_sweep, field_npoints
+    ):
+        # Validate input
+        if not isinstance(field_center, (int, float)) or field_center < 0:
+            return
+        if not isinstance(field_sweep, (int, float)) or field_sweep < 0:
+            return
+        if not isinstance(field_npoints, int) or field_npoints < 1:
+            return
+        if not isinstance(mode, str) or (mode != "cw" and mode != "tr"):
+            print("mode must be 'cw' or 'tr'")
+            return
+
+        # Calculate new start, stop, step
+        field_start = field_center - field_sweep / 2
+        field_stop = field_center + field_sweep / 2
+        field_step = (field_stop - field_start) / (field_npoints - 1)
+        
+        return field_start, field_stop, field_step
+
+
+    def get_field_center_sweep_npoints(
+        self, mode, field_start, field_stop, field_step
+    ):
+        # Validate input
+        if not isinstance(field_start, (int, float)) or field_start < 0:
+            return
+        if not isinstance(field_stop, (int, float)) or field_stop < 0:
+            return
+        if not isinstance(field_step, (int, float)) or field_step < 0:
+            return
+        if not isinstance(mode, str) or (mode != "cw" and mode != "tr"):
+            print("mode must be 'cw' or 'tr'")
+            return
+
+        # Calculate new center, sweep, npoints
+        field_center = (field_stop + field_start) / 2
+        field_sweep = field_stop - field_start
+        field_npoints = int((field_stop - field_start) / field_step) + 1
+        
+        return field_center, field_sweep, field_npoints
+
+
     def load_data(self, path, viewport):
-        print('Load data. path:', path, ', viewport:', viewport)
+        # Viewport should be 'primary' or 'secondary'
+        args = [path, 'None', viewport]
+        self._command_wait(self.xepr.XeprCmds.vpLoad, *args)
 
 
     def open_xepr_api(self):
@@ -224,6 +340,141 @@ class XeprPlusLogic():
 
     def send_to_spectrometer(self, exp):
         print("Send to spectrometer:", exp)
+        print("Get values from spectrometer (here default values).")
+    
+    
+    def set_cw_tr_params(self, mode, **kwargs):
+        # TODO there is no signal channel in transient experiment, therefore 
+        # probably the resolution of the field_npoints must be set in another
+        # way if mode == transient
+
+        # Validate input
+        if not isinstance(mode, str) or (mode != "cw" and mode != "tr"):
+            print("mode must be 'cw' or 'tr'")
+            return
+
+        new_params = {}
+        if mode == "cw":
+            param_map = cw_param_map
+        elif mode == "tr":
+            param_map = tr_param_map
+
+        for param_name, value in kwargs.items():
+            # Validate input
+            if value is None:
+                continue
+            if not param_name in param_map:
+                print(f"{param_name} is not a supported parameter.")
+                return
+            if param_name in ["field_center", "field_sweep"]:
+                if not isinstance(value, (int, float)) or value < 1:
+                    continue
+            elif param_name == "field_npoints":
+                if not isinstance(value, int) or value < 1:
+                    continue
+            elif param_name == "mod_freq":
+                if not isinstance(value, int) or value < 1:
+                    continue
+            elif param_name == "mod_amp":
+                if (not isinstance(value, (int, float)) or
+                        value <= 0 or
+                        value >= 10):  
+                    continue
+            elif param_name == "mod_phase":
+                if not isinstance(value, (int, float)):
+                    continue
+            elif param_name == "harmonic":
+                if not isinstance(value, int) or value < 0 or value > 1:
+                    continue
+            elif param_name == "mw_atten":
+                if (not isinstance(value, (int, float)) or
+                        value < 0 or
+                        value > 60):
+                    continue
+            elif param_name == "conv_time":
+                if not isinstance(value, (int, float)) or value < 0:
+                    continue
+            elif param_name == "sweep_time":
+                if not isinstance(value, (int, float)) or value < 0:
+                    continue
+            elif param_name == "receiver_gain":
+                if (not isinstance(value, (int, float)) or
+                        value < 0 or
+                        value > 60):
+                    continue
+            elif param_name == "offset":
+                if not isinstance(value, (int, float)):
+                    continue
+            
+            # Set new parameter on the hardware
+            print(f"\nSet {param_name}: {value}")
+            setattr(self, f"{mode}_{param_name}", value)
+
+        # Get all parameters from the hardware
+        for param_name, cmd in param_map.items():
+            par = f"{mode}_{param_name}"
+            new_params[par] = getattr(self, par)
+
+        # Update field start, stop, step if necessary 
+        field_params = ["field_center", "field_sweep", "field_npoints"]
+        if any(s in kwargs.keys() for s in field_params):
+            start, stop, step = self.get_field_start_stop_step(
+                mode=mode,
+                field_center=new_params[f"{mode}_field_center"],
+                field_sweep=new_params[f"{mode}_field_sweep"],
+                field_npoints=new_params[f"{mode}_field_npoints"]
+            )
+            new_params[f"{mode}_field_start"] = start
+            new_params[f"{mode}_field_stop"] = stop
+            new_params[f"{mode}_field_step"] = step
+
+        return new_params
+
+
+    def set_field_start_stop_step(
+        self, mode, field_start, field_stop, field_step
+    ):
+        # Validate input
+        if not isinstance(field_start, (int, float)) or field_start < 0:
+            return
+        if not isinstance(field_stop, (int, float)) or field_stop < 0:
+            return
+        if not isinstance(field_step, (int, float)) or field_step < 0:
+            return
+        if not isinstance(mode, str) or (mode != "cw" and mode != "tr"):
+            print("mode must be 'cw' or 'tr'")
+            return
+
+        # Adjust stop
+        if field_stop <= field_start:
+            stop_corrected = field_start + field_step
+            print("\nSTOP CORRECTED:", stop_corrected)
+        else:
+            stop_corrected = (
+                field_stop + np.mod((field_stop - field_start), field_step)
+            )
+        
+        # Calculate new start, stop, step
+        center, sweep, npoints = self.get_field_center_sweep_npoints(
+            mode=mode,
+            field_start=field_start,
+            field_stop=stop_corrected,
+            field_step=field_step
+        )
+
+        new_params = self.set_cw_tr_params(
+            mode=mode,
+            field_center=center,
+            field_sweep=sweep,
+            field_npoints=npoints,
+            )
+        
+        return new_params
+
+
+    def set_temperature(self, temperature):
+        args = ['AcqHidden', '*gTempCtrl.Temperature', temperature]
+        self._command_wait(self.xepr.XeprCmds.aqParSet, *args)
 
 
 class DatasetXepr():
